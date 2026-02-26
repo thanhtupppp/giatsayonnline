@@ -1,0 +1,91 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "donHang",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "maCuaHang", "order": "ASCENDING" },
+        { "fieldPath": "trangThai", "order": "ASCENDING" },
+        { "fieldPath": "ngayTao", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "donHang",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "maCuaHang", "order": "ASCENDING" },
+        { "fieldPath": "maKhachHang", "order": "ASCENDING" },
+        { "fieldPath": "ngayTao", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "donHang",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "maCuaHang", "order": "ASCENDING" },
+        { "fieldPath": "maNhanVien", "order": "ASCENDING" },
+        { "fieldPath": "ngayTao", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "donHang",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "maCuaHang", "order": "ASCENDING" },
+        { "fieldPath": "daXacDinhDichVu", "order": "ASCENDING" },
+        { "fieldPath": "ngayTao", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "users",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "maCuaHang", "order": "ASCENDING" },
+        { "fieldPath": "vaiTro", "order": "ASCENDING" },
+        { "fieldPath": "trangThai", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "khachHang",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "maCuaHang", "order": "ASCENDING" },
+        { "fieldPath": "soDienThoai", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "giaoDich",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "maCuaHang", "order": "ASCENDING" },
+        { "fieldPath": "maDonHang", "order": "ASCENDING" },
+        { "fieldPath": "ngayGiaoDich", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "donHang",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "maCuaHang", "order": "ASCENDING" },
+        { "fieldPath": "ngayTao", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "baoCao",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "maCuaHang", "order": "ASCENDING" },
+        { "fieldPath": "ngayTao", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "auditLog",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "maCuaHang", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

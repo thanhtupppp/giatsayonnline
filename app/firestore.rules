@@ -1,0 +1,183 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===== HELPER FUNCTIONS =====
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function getRole() {
+      return request.auth.token.vaiTro;
+    }
+
+    function getMaCuaHang() {
+      return request.auth.token.maCuaHang;
+    }
+
+    function hasRole(role) {
+      return isSignedIn() && getRole() == role;
+    }
+
+    function hasAnyRole(roles) {
+      return isSignedIn() && getRole() in roles;
+    }
+
+    function isSuperAdmin() {
+      return hasRole('SUPER_ADMIN');
+    }
+
+    function isSameCuaHang(maCuaHang) {
+      return isSignedIn() && (isSuperAdmin() || getMaCuaHang() == maCuaHang);
+    }
+
+    function isValidPhone(phone) {
+      return phone.matches('^[0-9]{10,11}$');
+    }
+
+    function isValidEmail(email) {
+      return email.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$');
+    }
+
+    // ===== COLLECTION: cuaHang =====
+    match /cuaHang/{maCuaHang} {
+      allow create: if isSuperAdmin();
+      allow read: if isSuperAdmin() || getMaCuaHang() == maCuaHang;
+      allow update, delete: if isSuperAdmin();
+    }
+
+    // ===== COLLECTION: users =====
+    match /users/{userId} {
+      allow create: if isSignedIn() && (
+        (isSuperAdmin() && request.resource.data.vaiTro == 'ADMIN')
+        || (hasRole('ADMIN')
+            && request.resource.data.vaiTro in ['NHAN_VIEN_QUAY', 'KY_THUAT_VIEN']
+            && request.resource.data.maCuaHang == getMaCuaHang())
+      )
+      && isValidEmail(request.resource.data.email);
+
+      allow read: if isSignedIn() && (
+        request.auth.uid == userId
+        || isSuperAdmin()
+        || (hasRole('ADMIN') && resource.data.maCuaHang == getMaCuaHang())
+      );
+
+      allow update: if isSignedIn() && (
+        (request.auth.uid == userId
+         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['vaiTro', 'maCuaHang']))
+        || isSuperAdmin()
+        || (hasRole('ADMIN') && resource.data.maCuaHang == getMaCuaHang())
+      );
+
+      allow delete: if isSuperAdmin()
+                    || (hasRole('ADMIN') && resource.data.maCuaHang == getMaCuaHang());
+    }
+
+    // ===== COLLECTION: donHang =====
+    match /donHang/{orderId} {
+      allow create: if hasAnyRole(['ADMIN', 'NHAN_VIEN_QUAY'])
+                    && request.resource.data.maCuaHang == getMaCuaHang()
+                    && request.resource.data.maNhanVien == request.auth.uid
+                    && request.resource.data.trangThai == 'CHO_XU_LY'
+                    && request.resource.data.tongTien >= 0;
+
+      allow read: if isSuperAdmin() || isSameCuaHang(resource.data.maCuaHang);
+
+      allow update: if isSameCuaHang(resource.data.maCuaHang) && (
+        hasAnyRole(['SUPER_ADMIN', 'ADMIN'])
+        || (hasRole('NHAN_VIEN_QUAY')
+            && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['trangThai', 'tienDaTra', 'tienConLai', 'lichSuCapNhat', 'danhSachDichVu', 'tongTien', 'tongTrongLuong', 'daXacDinhDichVu'])
+            && request.resource.data.tienDaTra <= request.resource.data.tongTien)
+        || (hasRole('KY_THUAT_VIEN')
+            && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['trangThai', 'lichSuCapNhat'])
+            && request.resource.data.trangThai in ['DANG_GIAT', 'DANG_SAY', 'DANG_UI', 'HOAN_THANH'])
+      );
+
+      allow delete: if isSuperAdmin()
+                    || (hasRole('ADMIN') && isSameCuaHang(resource.data.maCuaHang));
+    }
+
+    // ===== COLLECTION: khachHang =====
+    match /khachHang/{customerId} {
+      allow create: if hasAnyRole(['ADMIN', 'NHAN_VIEN_QUAY'])
+                    && request.resource.data.maCuaHang == getMaCuaHang()
+                    && isValidPhone(request.resource.data.soDienThoai)
+                    && request.resource.data.diemTichLuy == 0
+                    && (!request.resource.data.keys().hasAny(['email'])
+                        || request.resource.data.email == ''
+                        || isValidEmail(request.resource.data.email));
+
+      allow read: if isSuperAdmin() || isSameCuaHang(resource.data.maCuaHang);
+
+      allow update: if (isSuperAdmin() || (hasAnyRole(['ADMIN', 'NHAN_VIEN_QUAY'])
+                                           && isSameCuaHang(resource.data.maCuaHang)))
+                    && !request.resource.data.diff(resource.data).affectedKeys()
+                       .hasAny(['diemTichLuy', 'tongChiTieu', 'soLanGiaoDich', 'maCuaHang']);
+
+      allow delete: if isSuperAdmin()
+                    || (hasRole('ADMIN') && isSameCuaHang(resource.data.maCuaHang));
+    }
+
+    // ===== COLLECTION: dichVu =====
+    match /dichVu/{serviceId} {
+      allow create: if hasAnyRole(['SUPER_ADMIN', 'ADMIN'])
+                    && request.resource.data.maCuaHang == getMaCuaHang()
+                    && request.resource.data.thoiGianXuLy > 0;
+
+      allow read: if isSuperAdmin() || isSameCuaHang(resource.data.maCuaHang);
+
+      allow update, delete: if isSuperAdmin()
+                            || (hasRole('ADMIN') && isSameCuaHang(resource.data.maCuaHang));
+    }
+
+    // ===== COLLECTION: giaoDich =====
+    match /giaoDich/{transactionId} {
+      allow create: if hasAnyRole(['ADMIN', 'NHAN_VIEN_QUAY'])
+                    && request.resource.data.maCuaHang == getMaCuaHang()
+                    && request.resource.data.maNhanVien == request.auth.uid
+                    && request.resource.data.soTien > 0
+                    && request.resource.data.ngayGiaoDich == request.time;
+
+      allow read: if isSuperAdmin() || isSameCuaHang(resource.data.maCuaHang);
+
+      allow update: if (isSuperAdmin() || (hasAnyRole(['ADMIN', 'NHAN_VIEN_QUAY'])
+                                           && isSameCuaHang(resource.data.maCuaHang)))
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['trangThai']);
+
+      allow delete: if isSuperAdmin()
+                    || (hasRole('ADMIN') && isSameCuaHang(resource.data.maCuaHang));
+    }
+
+    // ===== COLLECTION: cauHinhCuaHang =====
+    match /cauHinhCuaHang/{configId} {
+      allow read: if isSuperAdmin() || isSameCuaHang(resource.data.maCuaHang);
+      allow create, update: if isSuperAdmin()
+                            || (hasRole('ADMIN') && request.resource.data.maCuaHang == getMaCuaHang());
+      allow delete: if isSuperAdmin();
+    }
+
+    // ===== COLLECTION: baoCao (immutable) =====
+    match /baoCao/{reportId} {
+      allow create: if isSuperAdmin()
+                    || (hasRole('ADMIN') && request.resource.data.maCuaHang == getMaCuaHang());
+      allow read: if isSuperAdmin()
+                  || (hasRole('ADMIN') && resource.data.maCuaHang == getMaCuaHang());
+      allow update, delete: if false;
+    }
+
+    // ===== COLLECTION: auditLog (immutable, Cloud Functions only) =====
+    match /auditLog/{logId} {
+      allow create: if false;
+      allow read: if isSuperAdmin()
+                  || (hasRole('ADMIN') && resource.data.maCuaHang == getMaCuaHang());
+      allow update, delete: if false;
+    }
+
+    // ===== DEFAULT: DENY ALL =====
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
