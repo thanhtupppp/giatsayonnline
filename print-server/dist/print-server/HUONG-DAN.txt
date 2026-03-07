@@ -1,0 +1,20 @@
+============================================
+  HUONG DAN CAI DAT PRINT SERVER
+============================================
+
+1. Chep file "serviceAccountKey.json" vao thu muc nay
+   (cung cap tu Firebase Console > Service Account)
+
+2. Chinh sua file ".env" de cau hinh:
+   - MA_CUA_HANG: Ma cua hang (de trong neu muon chon khi chay)
+   - INTERACTIVE_STORE_SELECT=true: Chon cua hang tren man hinh
+   - PRINTER_NAME: Ten may in (de trong = may in mac dinh)
+   - PAPER_SIZE_MM: Kho giay (mac dinh: 80mm)
+
+3. Nhan doi chuot vao "start.bat" de chay
+
+LUU Y:
+   - Khong can cai dat Node.js - da co san trong thu muc "node\"
+   - Khong can cai bat ky phan mem nao khac
+   - May tinh can co ket noi Internet de ket noi Firebase
+

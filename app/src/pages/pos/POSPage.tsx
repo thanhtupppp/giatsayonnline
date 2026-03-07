@@ -3,7 +3,7 @@ import {
   Box, Typography, Card, CardContent, Grid, Button, TextField,
   Chip, IconButton, Paper, Divider, CircularProgress,
   InputAdornment, Dialog, DialogTitle, DialogContent, DialogActions,
-  Alert, Collapse, Badge, useMediaQuery, useTheme
+  Alert, Collapse, Badge
 } from '@mui/material';
 import {
   Search, Add, Remove, ShoppingCart, Delete, Payment,
@@ -24,10 +24,8 @@ import type { DichVu, KhachHang, ChiTietDichVu } from '../../types';
 import { CheDoTaoDonHang, LoaiTinhGia, PhuongThucThanhToan, TrangThaiDonHang } from '../../types';
 import { formatCurrency, TRANG_THAI_LABELS, TRANG_THAI_COLORS } from '../../utils/constants';
 import { logError, getUserMessage } from '../../utils/errorHandler';
-import PrintReceipt from '../../components/print/PrintReceipt';
-import PrintLaundryTag from '../../components/print/PrintLaundryTag';
-import { printService, type PrintJob } from '../../services/printService';
-import { silentPrint, silentPrintMultiple } from '../../utils/printUtils';
+import { printService } from '../../services/printService';
+
 import BarcodeScanner from '../../components/scanner/BarcodeScanner';
 import BankQRCode from '../../components/payment/BankQRCode';
 import type { DonHang } from '../../types';
@@ -39,8 +37,6 @@ interface CartItem extends ChiTietDichVu {
 export default function POSPage() {
   const { userProfile } = useAuth();
   const navigate = useNavigate();
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const maCuaHang = userProfile?.maCuaHang || '';
   const phoneInputRef = useRef<HTMLInputElement>(null);
 
@@ -59,7 +55,7 @@ export default function POSPage() {
 
   // Order mode
   const [cheDoTaoDon, setCheDoTaoDon] = useState<CheDoTaoDonHang>(CheDoTaoDonHang.CHON_DICH_VU_TRUOC);
-  const [cauHinh, setCauHinh] = useState<any>(null);
+
 
   // Quick create customer
   const [createCustomerOpen, setCreateCustomerOpen] = useState(false);
@@ -69,7 +65,7 @@ export default function POSPage() {
   // Print receipt
   const [printOpen, setPrintOpen] = useState(false);
   const [createdOrder, setCreatedOrder] = useState<DonHang | null>(null);
-  const [printCustomerName, setPrintCustomerName] = useState('');
+
 
   // TC 12-14: Payment flow
   const [paymentOpen, setPaymentOpen] = useState(false);
@@ -104,10 +100,7 @@ export default function POSPage() {
   const [addServiceCart, setAddServiceCart] = useState<CartItem[]>([]);
 
   // ---- REMOTE PRINTING STATE ----
-  const [remotePrintQueue, setRemotePrintQueue] = useState<PrintJob[]>([]);
-  const [remotePrintingJob, setRemotePrintingJob] = useState<PrintJob | null>(null);
-  const [remotePrintingOrder, setRemotePrintingOrder] = useState<DonHang | null>(null);
-  const [remotePrintingCustomer, setRemotePrintingCustomer] = useState<KhachHang | null>(null);
+  // Removed remote printing state variables as they are unused and the logic is disabled.
 
   // Load data
   useEffect(() => {
@@ -119,7 +112,7 @@ export default function POSPage() {
         ]);
         setDichVus(services);
         if (config) {
-          setCauHinh(config);
+
           if (config.cheDoTaoDonHang) {
             setCheDoTaoDon(config.cheDoTaoDonHang);
           }
@@ -149,8 +142,10 @@ export default function POSPage() {
     load();
   }, []);
 
-  // ---- REMOTE PRINTING LOGIC ----
-  // 1. PC listens to print queue
+  // ---- REMOTE PRINTING LOGIC (DISABLED FOR STANDALONE SERVER) ----
+  // 1. PC listens to print queue 
+  // Disable in browser so that the Node.js zero-UI print server handles this
+  /*
   useEffect(() => {
     if (isMobile || !maCuaHang) return; // Mobile pushes to queue; PC listens
 
@@ -196,7 +191,7 @@ export default function POSPage() {
           const tagHtml = tagEl ? tagEl.innerHTML.trim() : '';
           if (tagHtml) {
             silentPrintMultiple([
-              { html: receiptEl.innerHTML, title: `Phiếu tiếp nhận (${remotePrintingOrder.maDonHang})` },
+              { html: receiptEl.innerHTML, title: \`Phiếu tiếp nhận (\${remotePrintingOrder.maDonHang})\` },
               { html: tagHtml, title: 'Tag dán đồ' },
             ]);
           } else {
@@ -217,6 +212,8 @@ export default function POSPage() {
     setRemotePrintingOrder(null);
     setRemotePrintingCustomer(null);
   };
+  */
+  // -------------------------------
   // -------------------------------
 
   // TC 20+21: Load recent orders and today's statistics + badge counts
@@ -443,9 +440,27 @@ export default function POSPage() {
       const order = await donHangService.getById(orderId);
       if (order) {
         setCreatedOrder(order);
-        setPrintCustomerName(customer.hoTen);
-        // Always show print receipt — payment happens later when customer picks up
-        setPrintOpen(true);
+        
+        // Auto-print immediately without dialog
+        try {
+          const jobId = await printService.requestPrint(maCuaHang, order.maDonHang, userProfile?.hoTen || 'NV', 'TAO_MOI');
+          toast.loading('🖨 Đang gửi lệnh in...', { id: `print-${jobId}` });
+          
+          const unsubscribe = printService.listenForPrintStatus(jobId, (status, errorMsg) => {
+            if (status === 'PRINTING') {
+              toast.loading('🖨 Đang in...', { id: `print-${jobId}` });
+            } else if (status === 'SUCCESS') {
+              toast.success(`✅ In thành công đơn ${order.maDonHang}`, { id: `print-${jobId}` });
+              unsubscribe();
+            } else if (status === 'FAILED') {
+              toast.error(`❌ Lỗi in: ${errorMsg || 'Không xác định'}`, { id: `print-${jobId}`, duration: 5000 });
+              unsubscribe();
+            }
+          });
+          setTimeout(() => unsubscribe(), 30000);
+        } catch (err) {
+          toast.error('Lỗi khi tự động gửi lệnh in');
+        }
       }
 
       toast.success(isMode2 ? 'Tạo phiếu hẹn thành công! 🎫' : 'Tạo đơn hàng thành công! 🎉');
@@ -516,32 +531,31 @@ export default function POSPage() {
     toast('Đã hủy đơn hàng', { icon: '🗑️' });
   };
 
-  // Print handler — prints receipt + laundry tag as 2 separate bills (auto-cut between)
+  // Print handler — directly requests print server
   const handlePrint = async () => {
-    if (isMobile && createdOrder) {
-      try {
-        await printService.requestPrint(maCuaHang, createdOrder.maDonHang, userProfile?.hoTen || 'Mobile');
-        toast.success(`Đã gửi lệnh in đơn ${createdOrder.maDonHang} đến máy PC`);
-        setPrintOpen(false);
-      } catch (err) {
-        toast.error('Lỗi khi gửi lệnh in');
-      }
-      return;
-    }
+    if (!createdOrder) return;
+    try {
+      const jobId = await printService.requestPrint(maCuaHang, createdOrder.maDonHang, userProfile?.hoTen || 'NV', 'TAO_MOI');
+      toast.loading('🖨 Đang gửi lệnh in...', { id: `print-${jobId}` });
+      setPrintOpen(false);
 
-    const receiptEl = document.getElementById('print-receipt-area');
-    const tagEl = document.getElementById('print-tag-area');
-    if (!receiptEl) return;
-    const tagHtml = tagEl ? tagEl.innerHTML.trim() : '';
+      // Listen for realtime print status from print-server
+      const unsubscribe = printService.listenForPrintStatus(jobId, (status, errorMsg) => {
+        if (status === 'PRINTING') {
+          toast.loading('🖨 Đang in...', { id: `print-${jobId}` });
+        } else if (status === 'SUCCESS') {
+          toast.success(`✅ In thành công đơn ${createdOrder.maDonHang}`, { id: `print-${jobId}` });
+          unsubscribe();
+        } else if (status === 'FAILED') {
+          toast.error(`❌ Lỗi in: ${errorMsg || 'Không xác định'}`, { id: `print-${jobId}`, duration: 5000 });
+          unsubscribe();
+        }
+      });
 
-    if (tagHtml) {
-      // 2 separate print jobs → POS auto-cutter cuts between them
-      silentPrintMultiple([
-        { html: receiptEl.innerHTML, title: 'Phiếu tiếp nhận' },
-        { html: tagHtml, title: 'Tag dán đồ' },
-      ]);
-    } else {
-      silentPrint(receiptEl.innerHTML);
+      // Auto-cleanup after 30s to prevent memory leak
+      setTimeout(() => unsubscribe(), 30000);
+    } catch (err) {
+      toast.error('Lỗi khi gửi lệnh in');
     }
   };
 
@@ -971,9 +985,9 @@ export default function POSPage() {
 
       {/* ===== TAB 0: TẠO ĐƠN ===== */}
       {posTab === 0 && (
-      <Box sx={{ display: 'flex', gap: 2, flex: 1, flexDirection: { xs: 'column', md: 'row' }, overflow: { xs: 'auto', md: 'hidden' } }}>
+      <Box sx={{ display: 'flex', gap: 2, flex: 1, flexDirection: { xs: 'column', md: 'row' }, overflow: { xs: 'hidden', md: 'hidden' } }}>
         {/* Left: Customer + Services */}
-        <Box sx={{ flex: 1, overflow: 'auto' }}>
+        <Box sx={{ flex: 1, overflow: 'auto', minHeight: { xs: '40vh', md: 0 } }}>
           {/* Mode indicator — compact chip instead of large warning banner */}
           <Chip
             icon={isMode2 ? undefined : undefined}
@@ -1112,6 +1126,7 @@ export default function POSPage() {
         <Box sx={{
           width: { xs: '100%', md: 350 },
           display: 'flex', flexDirection: 'column',
+          maxHeight: { xs: '50vh', md: 'none' },
           borderLeft: { md: '1px solid' }, borderTop: { xs: '1px solid', md: 'none' },
           borderColor: 'divider', bgcolor: 'grey.50', borderRadius: 2,
         }}>
@@ -1582,67 +1597,57 @@ export default function POSPage() {
         </DialogActions>
       </Dialog>
 
-      {/* Print Receipt Dialog */}
+      {/* Order Success Dialog */}
       <Dialog open={printOpen} onClose={() => setPrintOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>{isMode2 ? 'Phiếu hẹn' : 'Phiếu tiếp nhận'}</DialogTitle>
+        <DialogTitle sx={{ textAlign: 'center', pb: 1 }}>
+          {isMode2 ? 'Khởi tạo phiếu hẹn thành công 🎉' : 'Tạo đơn thành công 🎉'}
+        </DialogTitle>
         <DialogContent>
+          <Typography textAlign="center" color="text.secondary" mb={2}>
+            Lệnh in đang được tự động gửi đến máy in...
+          </Typography>
           {createdOrder && (
             <>
-              <Box id="print-receipt-area">
-                <PrintReceipt
-                  donHang={createdOrder}
-                  tenCuaHang={cauHinh?.mauInPhieu?.tenCuaHang}
-                  diaChiCuaHang={cauHinh?.mauInPhieu?.diaChi}
-                  sdtCuaHang={cauHinh?.mauInPhieu?.soDienThoai}
-                />
-                {isMode2 && (
-                  <Box sx={{ textAlign: 'center', mt: 1 }}>
-                    <Typography sx={{ fontSize: 11, fontWeight: 700, color: 'warning.main' }}>
-                      ⚠ Dịch vụ và giá sẽ được xác định sau khi giặt
-                    </Typography>
-                  </Box>
-                )}
-              </Box>
+              {isMode2 && (
+                <Box sx={{ textAlign: 'center', mt: 1 }}>
+                  <Typography sx={{ fontSize: 13, fontWeight: 700, color: 'warning.main' }}>
+                    ⚠ Dịch vụ và giá cả sẽ được xác định sau khi giặt xong.
+                  </Typography>
+                </Box>
+              )}
               {/* Show order amount info for Mode 1 */}
               {!isMode2 && createdOrder.tongTien > 0 && (
-                <Box sx={{ mt: 2, p: 1.5, bgcolor: 'grey.50', borderRadius: 2 }}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <Typography variant="body2">Tổng tiền:</Typography>
-                    <Typography variant="body2" fontWeight={700}>{formatCurrency(createdOrder.tongTien)}</Typography>
+                <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                    <Typography variant="body1">Tổng tiền:</Typography>
+                    <Typography variant="body1" fontWeight={700}>{formatCurrency(createdOrder.tongTien)}</Typography>
                   </Box>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <Typography variant="body2">Còn lại:</Typography>
-                    <Typography variant="body2" fontWeight={700} color="error">{formatCurrency(createdOrder.tienConLai)}</Typography>
+                    <Typography variant="body1">Còn lại (Chưa thanh toán):</Typography>
+                    <Typography variant="body1" fontWeight={700} color="error">{formatCurrency(createdOrder.tienConLai)}</Typography>
                   </Box>
                 </Box>
               )}
-              {/* Hidden laundry tag — off-screen so it fully renders (needed for barcode SVG) */}
-              <Box id="print-tag-area" sx={{ position: 'absolute', left: -9999, top: -9999, width: 300 }}>
-                <PrintLaundryTag donHang={createdOrder} tenKhachHang={printCustomerName} />
-              </Box>
             </>
           )}
         </DialogContent>
-        <DialogActions sx={{ px: 2, pb: 2, gap: 1 }}>
-          <Button onClick={() => setPrintOpen(false)}>Đóng</Button>
+        <DialogActions sx={{ px: 2, pb: 3, justifyContent: 'center', gap: 2 }}>
+          <Button variant="outlined" sx={{ minWidth: 120 }} onClick={() => setPrintOpen(false)}>Đóng</Button>
           {/* Optional: pay now */}
           {createdOrder && !isMode2 && createdOrder.tienConLai > 0 && (
             <Button
-              variant="outlined" color="success" startIcon={<Payment />}
+              variant="contained" color="success" startIcon={<Payment />}
               onClick={() => {
                 setPrintOpen(false);
                 setPaymentAmount('');
                 setPaymentMethod(PhuongThucThanhToan.TIEN_MAT);
                 setPaymentOpen(true);
               }}
-              sx={{ minHeight: 44 }}
+              sx={{ minWidth: 160 }}
             >
               Thanh toán ngay
             </Button>
           )}
-          <Button variant="contained" startIcon={<Print />} onClick={handlePrint} sx={{ minHeight: 44 }}>
-            In phiếu (F8)
-          </Button>
         </DialogActions>
       </Dialog>
 
@@ -1655,25 +1660,7 @@ export default function POSPage() {
       />
 
       {/* ===== HIDDEN REMOTE PRINT CONTAINER ===== */}
-      {/* Renders off-screen so React can build the print HTML before sending to silentPrint */}
-      <Box sx={{ position: 'absolute', top: '-9999px', left: '-9999px', opacity: 0, pointerEvents: 'none' }}>
-        {remotePrintingOrder && (
-          <>
-            <div id="remote-print-receipt-area">
-              <PrintReceipt
-                donHang={remotePrintingOrder}
-                // (Optional if your PrintReceipt takes tenCuaHang, etc. We'll pass them properly)
-              />
-            </div>
-            <div id="remote-print-tag-area">
-              <PrintLaundryTag
-                donHang={remotePrintingOrder}
-                tenKhachHang={remotePrintingCustomer?.hoTen || 'Khách lẻ'}
-              />
-            </div>
-          </>
-        )}
-      </Box>
+      {/* Remote printing is disabled, removing unused DOM nodes */}
 
       </Box>
     </Box>

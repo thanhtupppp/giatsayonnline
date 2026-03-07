@@ -4,38 +4,32 @@ import {
   TableHead, TableRow, Paper, Chip, Select, MenuItem,
   FormControl, InputLabel, IconButton, CircularProgress, Button,
   Dialog, DialogTitle, DialogContent, DialogActions, Stepper, Step, StepLabel,
-  TextField, InputAdornment, useMediaQuery, useTheme
+  TextField, InputAdornment
 } from '@mui/material';
 import { Visibility, Search, Print, Warning, NavigateNext, NavigateBefore } from '@mui/icons-material';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { useAuth } from '../../contexts/AuthContext';
-import { cauHinhService } from '../../services/cauHinhService';
 import { donHangService } from '../../services/donHangService';
 import { userService } from '../../services/userService';
-import type { DonHang, CauHinhCuaHang } from '../../types';
+import type { DonHang } from '../../types';
 import { TrangThaiDonHang } from '../../types';
 import { TRANG_THAI_LABELS, TRANG_THAI_COLORS, formatCurrency, getStatusTransitionsForRole, VALID_STATUS_TRANSITIONS } from '../../utils/constants';
 import { logError, getUserMessage } from '../../utils/errorHandler';
-import PrintReceipt from '../../components/print/PrintReceipt';
-import { silentPrint } from '../../utils/printUtils';
 import { printService } from '../../services/printService';
 
 export default function DonHangPage() {
   const { userProfile } = useAuth();
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const vaiTro = userProfile?.vaiTro;
   const [donHangs, setDonHangs] = useState<DonHang[]>([]);
-  const [cauHinh, setCauHinh] = useState<CauHinhCuaHang | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<TrangThaiDonHang | ''>('');
   const [searchPhone, setSearchPhone] = useState('');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
   const [detailOpen, setDetailOpen] = useState(false);
-  const [printOpen, setPrintOpen] = useState(false);
   const [selected, setSelected] = useState<DonHang | null>(null);
 
   // Employee name mapping: uid → hoTen
@@ -50,7 +44,7 @@ export default function DonHangPage() {
     setLoading(true);
     try {
       const maCuaHang = userProfile?.maCuaHang || '';
-      const [result, configData, employees] = await Promise.all([
+      const [result, employees] = await Promise.all([
         donHangService.getByMaCuaHangPaginated(
           maCuaHang,
           {
@@ -58,11 +52,9 @@ export default function DonHangPage() {
             lastDoc: cursor || null,
           }
         ),
-        cauHinhService.get(maCuaHang),
         userService.getByMaCuaHang(maCuaHang),
       ]);
       setDonHangs(result.data);
-      if (configData) setCauHinh(configData);
       setHasMore(result.hasMore);
       // Store cursor for next page
       if (result.lastDoc) {
@@ -182,22 +174,30 @@ export default function DonHangPage() {
     return idx >= 0 ? idx : 0;
   };
 
-  const handlePrint = async () => {
-    if (!selected) return;
-    if (isMobile) {
-      const maCuaHang = userProfile?.maCuaHang || '';
-      try {
-        await printService.requestPrint(maCuaHang, selected.maDonHang, userProfile?.hoTen || 'Mobile');
-        toast.success(`Đã gửi lệnh in đơn ${selected.maDonHang} đến máy PC`);
-      } catch (err) {
-        toast.error('Lỗi khi gửi lệnh in');
-      }
-      return;
-    }
+  const handlePrint = async (donHangToPrint?: DonHang) => {
+    const targetOrder = donHangToPrint || selected;
+    if (!targetOrder) return;
+    const maCuaHang = userProfile?.maCuaHang || '';
+    try {
+      const jobId = await printService.requestPrint(maCuaHang, targetOrder.maDonHang, userProfile?.hoTen || 'NV', 'IN_LAI');
+      toast.loading('🖨 Đang gửi lệnh in lại...', { id: `print-${jobId}` });
 
-    const el = document.getElementById('print-order-detail');
-    if (!el) return;
-    silentPrint(el.innerHTML, `Phiếu tiếp nhận (${selected.maDonHang})`);
+      // Listen for realtime print status from print-server
+      const unsubscribe = printService.listenForPrintStatus(jobId, (status, errorMsg) => {
+        if (status === 'PRINTING') {
+          toast.loading('🖨 Đang in...', { id: `print-${jobId}` });
+        } else if (status === 'SUCCESS') {
+          toast.success(`✅ In lại thành công đơn ${targetOrder.maDonHang}`, { id: `print-${jobId}` });
+          unsubscribe();
+        } else if (status === 'FAILED') {
+          toast.error(`❌ Lỗi in: ${errorMsg || 'Không xác định'}`, { id: `print-${jobId}`, duration: 5000 });
+          unsubscribe();
+        }
+      });
+      setTimeout(() => unsubscribe(), 30000);
+    } catch (err) {
+      toast.error('Lỗi khi gửi lệnh in');
+    }
   };
 
   return (
@@ -288,7 +288,7 @@ export default function DonHangPage() {
                     <IconButton size="small" color="primary" title="Chi tiết" onClick={() => { setSelected(dh); setDetailOpen(true); }}>
                       <Visibility fontSize="small" />
                     </IconButton>
-                    <IconButton size="small" color="secondary" title="In phiếu" onClick={() => { setSelected(dh); setPrintOpen(true); }}>
+                    <IconButton size="small" color="secondary" title="In phiếu" onClick={() => { handlePrint(dh); }}>
                       <Print fontSize="small" />
                     </IconButton>
                   </TableCell>
@@ -435,40 +435,13 @@ export default function DonHangPage() {
               ) : null}
             </DialogContent>
             <DialogActions>
-              <Button startIcon={<Print />} onClick={() => { setPrintOpen(true); setDetailOpen(false); }}>In phiếu</Button>
+              <Button startIcon={<Print />} onClick={() => { handlePrint(); setDetailOpen(false); }}>In phiếu (Gửi đến máy in)</Button>
               <Button onClick={() => setDetailOpen(false)}>Đóng</Button>
             </DialogActions>
           </>
         ) : null}
       </Dialog>
 
-      {/* Print Dialog */}
-      <Dialog open={printOpen} onClose={() => setPrintOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>In phiếu</DialogTitle>
-        <DialogContent>
-          {selected && (
-            <Box id="print-order-detail">
-              <PrintReceipt
-                donHang={selected}
-                tenCuaHang={cauHinh?.mauInPhieu?.tenCuaHang}
-                diaChiCuaHang={cauHinh?.mauInPhieu?.diaChi}
-                sdtCuaHang={cauHinh?.mauInPhieu?.soDienThoai}
-              />
-              {!selected.daXacDinhDichVu && (
-                <Box sx={{ textAlign: 'center', mt: 1 }}>
-                  <Typography sx={{ fontSize: 11, fontWeight: 700, color: 'warning.main' }}>
-                    ⚠ Dịch vụ và giá sẽ được xác định sau khi giặt
-                  </Typography>
-                </Box>
-              )}
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setPrintOpen(false)}>Đóng</Button>
-          <Button variant="contained" startIcon={<Print />} onClick={handlePrint}>In</Button>
-        </DialogActions>
-      </Dialog>
     </Box>
   );
 }

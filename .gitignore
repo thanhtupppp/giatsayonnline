@@ -1,0 +1,16 @@
+# Secrets
+serviceAccountKey.json
+
+# IDE
+.vscode/
+
+# Lint output
+app/eslint_compact.txt
+app/eslint_results.json
+
+# Node
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
