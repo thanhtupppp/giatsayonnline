@@ -4,14 +4,15 @@ import basicSsl from '@vitejs/plugin-basic-ssl'
 
 // https://vite.dev/config/
 // Yêu Cầu 12, Criteria 8: Minify and compress CSS/JS
-export default defineConfig({
-  plugins: [react(), basicSsl()],
+export default defineConfig(({ mode }) => ({
+  plugins: [
+    react(),
+    mode === 'development' && basicSsl(),
+  ].filter(Boolean),
   server: {
     host: true, // Expose on local network for mobile testing
   },
   build: {
-    // Terser for optimal minification
-    minify: 'terser',
     // Manual chunk splitting for better caching
     rollupOptions: {
       output: {
@@ -27,4 +28,4 @@ export default defineConfig({
     // Chunk size warning threshold
     chunkSizeWarningLimit: 500,
   },
-})
+}))
