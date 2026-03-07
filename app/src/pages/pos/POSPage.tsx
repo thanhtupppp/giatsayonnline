@@ -849,11 +849,11 @@ export default function POSPage() {
   }
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', bgcolor: 'grey.50', overflow: 'hidden', maxWidth: '100vw' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', bgcolor: 'background.default', overflow: 'hidden', maxWidth: '100vw' }}>
       {/* POS Header — compact bar with back button */}
       <Box sx={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        px: { xs: 1, sm: 2 }, py: 1, bgcolor: 'white', borderBottom: '1px solid', borderColor: 'divider',
+        px: { xs: 1, sm: 2 }, py: 1, bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider',
         boxShadow: '0 1px 4px rgba(0,0,0,0.06)', flexShrink: 0,
         overflow: 'hidden', minHeight: { xs: 48, sm: 56 },
       }}>
@@ -895,7 +895,7 @@ export default function POSPage() {
       {/* POS Step Buttons */}
       <Box sx={{
         display: 'flex', gap: { xs: 0.5, sm: 1.5 }, px: { xs: 0.5, sm: 2 }, py: { xs: 0.5, sm: 1.5 },
-        bgcolor: 'white', borderBottom: '2px solid', borderColor: 'divider', flexShrink: 0,
+        bgcolor: 'background.paper', borderBottom: '2px solid', borderColor: 'divider', flexShrink: 0,
       }}>
         {/* Tạo đơn - Green (F1) */}
         <Button
@@ -1128,10 +1128,10 @@ export default function POSPage() {
           display: 'flex', flexDirection: 'column',
           maxHeight: { xs: '50vh', md: 'none' },
           borderLeft: { md: '1px solid' }, borderTop: { xs: '1px solid', md: 'none' },
-          borderColor: 'divider', bgcolor: 'grey.50', borderRadius: 2,
+          borderColor: 'divider', bgcolor: 'background.paper', borderRadius: 2,
         }}>
           {/* Cart Header */}
-          <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'white', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <ShoppingCart color="primary" />
               <Typography variant="h6" fontWeight={700}>Giỏ hàng</Typography>
@@ -1175,7 +1175,7 @@ export default function POSPage() {
                       <Typography variant="body2" color="primary" fontWeight={600}>
                         {formatCurrency(item.donGia)} 
                       </Typography>
-                      <Box sx={{ display: 'flex', alignItems: 'center', bgcolor: 'grey.100', borderRadius: 1 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', bgcolor: 'action.hover', borderRadius: 1 }}>
                         <IconButton size="small" onClick={() => updateQuantity(item.maDichVu, -1)} sx={{ width: 36, height: 36 }}>
                           <Remove fontSize="small" />
                         </IconButton>
@@ -1395,7 +1395,7 @@ export default function POSPage() {
                           InputProps={{ sx: { fontSize: '1.2rem', fontWeight: 700 } }}
                         />
                         {Number(paymentAmount) > 0 && (
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1, p: 1, bgcolor: 'grey.50', borderRadius: 1 }}>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1, p: 1, bgcolor: 'action.hover', borderRadius: 1 }}>
                             <Typography variant="body2">Tiền thối:</Typography>
                             <Typography variant="body2" fontWeight={700} color="success.main">
                               {formatCurrency(Math.max(0, Number(paymentAmount) - lookupOrder.tienConLai))}
@@ -1538,7 +1538,7 @@ export default function POSPage() {
               {Number(paymentAmount) > 0 && (
                 <Box sx={{
                   display: 'flex', justifyContent: 'space-between', p: 1.5, mb: 2,
-                  bgcolor: changeAmount > 0 ? 'success.50' : 'grey.50', borderRadius: 2,
+                  bgcolor: changeAmount > 0 ? 'success.50' : 'background.default', borderRadius: 2,
                   border: '1px solid', borderColor: changeAmount > 0 ? 'success.main' : 'divider',
                 }}>
                   <Typography fontWeight={600}>Tiền thối:</Typography>
@@ -1559,9 +1559,9 @@ export default function POSPage() {
                       sx={{
                         py: 2, fontSize: '1.2rem', fontWeight: 700,
                         minHeight: 56, /* TC 23: Touch-friendly */
-                        bgcolor: !['C', '⌫'].includes(val) ? 'grey.100' : undefined,
+                        bgcolor: !['C', '⌫'].includes(val) ? 'action.hover' : undefined,
                         color: !['C', '⌫'].includes(val) ? 'text.primary' : undefined,
-                        '&:hover': { bgcolor: !['C', '⌫'].includes(val) ? 'grey.200' : undefined },
+                        '&:hover': { bgcolor: !['C', '⌫'].includes(val) ? 'action.selected' : undefined },
                       }}
                     >
                       {val}
@@ -1617,7 +1617,7 @@ export default function POSPage() {
               )}
               {/* Show order amount info for Mode 1 */}
               {!isMode2 && createdOrder.tongTien > 0 && (
-                <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
+                <Box sx={{ mt: 2, p: 2, bgcolor: 'action.hover', borderRadius: 2 }}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                     <Typography variant="body1">Tổng tiền:</Typography>
                     <Typography variant="body1" fontWeight={700}>{formatCurrency(createdOrder.tongTien)}</Typography>
