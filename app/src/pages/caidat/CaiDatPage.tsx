@@ -10,7 +10,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { cauHinhService } from '../../services/cauHinhService';
 import { auditLogService } from '../../services/auditLogService';
 import type { CauHinhCuaHang } from '../../types';
-import { CheDoTaoDonHang } from '../../types';
+import { CheDoTaoDonHang, VaiTro } from '../../types';
 import { donHangService } from '../../services/donHangService';
 import { khachHangService } from '../../services/khachHangService';
 import { giaoDichService } from '../../services/giaoDichService';
@@ -326,7 +326,8 @@ export default function CaiDatPage() {
           </Card>
         </Grid>
 
-        {/* Export dữ liệu */}
+        {/* Export dữ liệu — chỉ Super Admin */}
+        {userProfile?.vaiTro === VaiTro.SUPER_ADMIN && (
         <Grid size={{ xs: 12, md: 6 }}>
           <Card>
             <CardContent>
@@ -343,6 +344,7 @@ export default function CaiDatPage() {
             </CardContent>
           </Card>
         </Grid>
+        )}
       </Grid>
 
       {/* TC 8: Mode change confirmation dialog */}
