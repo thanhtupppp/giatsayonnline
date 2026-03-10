@@ -109,7 +109,7 @@ export default function App() {
                       </ProtectedRoute>
                     } />
                     <Route path="audit-log" element={
-                      <ProtectedRoute allowedRoles={[VaiTro.SUPER_ADMIN, VaiTro.ADMIN]}>
+                      <ProtectedRoute allowedRoles={[VaiTro.SUPER_ADMIN]}>
                         <Suspense fallback={<PageLoader />}><AuditLogPage /></Suspense>
                       </ProtectedRoute>
                     } />

@@ -62,7 +62,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Báo cáo', path: '/bao-cao', icon: <BarChart />, roles: [VaiTro.SUPER_ADMIN, VaiTro.ADMIN] },
   { label: 'Nhân viên', path: '/nhan-vien', icon: <Person />, roles: [VaiTro.SUPER_ADMIN, VaiTro.ADMIN] },
   { label: 'Cửa hàng', path: '/cua-hang', icon: <Store />, roles: [VaiTro.SUPER_ADMIN] },
-  { label: 'Audit Log', path: '/audit-log', icon: <History />, roles: [VaiTro.SUPER_ADMIN, VaiTro.ADMIN] },
+  { label: 'Audit Log', path: '/audit-log', icon: <History />, roles: [VaiTro.SUPER_ADMIN] },
   { label: 'Cài đặt', path: '/cai-dat', icon: <Settings />, roles: [VaiTro.SUPER_ADMIN, VaiTro.ADMIN] },
 ];
 
