@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import {
   Box, Typography, Card, CardContent, TextField, Button, Select,
-  MenuItem, FormControl, InputLabel, Alert,
+  MenuItem, FormControl, InputLabel, Alert, Autocomplete,
   Chip, CircularProgress, Grid, Dialog, DialogTitle, DialogContent, DialogActions,
 } from '@mui/material';
 import { Save, CloudDownload } from '@mui/icons-material';
@@ -17,6 +17,18 @@ import { giaoDichService } from '../../services/giaoDichService';
 import { dichVuService } from '../../services/dichVuService';
 
 const DAYS_OF_WEEK = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy'];
+
+// VietQR Bank Type
+interface VietQRBank {
+  id: number;
+  name: string;
+  code: string;
+  bin: string;
+  shortName: string;
+  logo: string;
+  transferSupported: number;
+  lookupSupported: number;
+}
 
 export default function CaiDatPage() {
   const { userProfile } = useAuth();
@@ -37,6 +49,9 @@ export default function CaiDatPage() {
   const [modeConfirmOpen, setModeConfirmOpen] = useState(false);
   const [pendingMode, setPendingMode] = useState<CheDoTaoDonHang | null>(null);
 
+  // VietQR Banks
+  const [banks, setBanks] = useState<VietQRBank[]>([]);
+
   useEffect(() => {
     const load = async () => {
       try {
@@ -46,6 +61,18 @@ export default function CaiDatPage() {
           savedConfigRef.current = { ...data };
         }
       } catch { /* use defaults */ }
+
+      // Fetch VietQR banks
+      try {
+        const response = await fetch('https://api.vietqr.io/v2/banks');
+        const bankData = await response.json();
+        if (bankData.code === '00') {
+          setBanks(bankData.data);
+        }
+      } catch {
+        console.error('Failed to fetch VietQR banks');
+      }
+
       setLoading(false);
     };
     load();
@@ -230,11 +257,33 @@ export default function CaiDatPage() {
         <Grid size={{ xs: 12, md: 6 }}>
           <Card>
             <CardContent>
-              <Typography variant="h6" fontWeight={600} gutterBottom>Thông tin thanh toán</Typography>
+              <Typography variant="h6" fontWeight={600} gutterBottom>Thông tin thanh toán (VietQR)</Typography>
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
-                <TextField label="Tên ngân hàng"
-                  value={config.thongTinThanhToan?.tenNganHang || ''}
-                  onChange={(e) => setConfig({ ...config, thongTinThanhToan: { ...config.thongTinThanhToan, tenNganHang: e.target.value } as any })} />
+                <Autocomplete
+                  options={banks}
+                  getOptionLabel={(option) => `${option.shortName} - ${option.name}`}
+                  value={banks.find((b) => b.bin === config.thongTinThanhToan?.maNganHang) || null}
+                  onChange={(_, newValue) => {
+                    setConfig({
+                      ...config,
+                      thongTinThanhToan: {
+                        ...(config.thongTinThanhToan as any),
+                        maNganHang: newValue?.bin || '',
+                        tenNganHang: newValue?.shortName || '',
+                      },
+                    });
+                  }}
+                  renderOption={(props, option) => (
+                    <Box component="li" sx={{ '& > img': { mr: 2, flexShrink: 0 } }} {...props}>
+                      <img loading="lazy" width="40" src={option.logo} alt="" />
+                      <Box>
+                        <Typography variant="body2" fontWeight={600}>{option.shortName}</Typography>
+                        <Typography variant="caption" color="text.secondary">{option.name}</Typography>
+                      </Box>
+                    </Box>
+                  )}
+                  renderInput={(params) => <TextField {...params} label="Chọn ngân hàng" />}
+                />
                 <TextField label="Số tài khoản"
                   value={config.thongTinThanhToan?.soTaiKhoan || ''}
                   onChange={(e) => setConfig({ ...config, thongTinThanhToan: { ...config.thongTinThanhToan, soTaiKhoan: e.target.value } as any })} />

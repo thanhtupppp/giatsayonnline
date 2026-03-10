@@ -138,11 +138,11 @@ export const giaoDichService = {
       });
   },
 
-  async getByMaCuaHang(maCuaHang: string): Promise<GiaoDich[]> {
+  async getByMaCuaHang(maCuaHang: string, options?: { limitCount?: number }): Promise<GiaoDich[]> {
     const q = query(
       collection(db, COLLECTION),
       where('maCuaHang', '==', maCuaHang),
-      limit(DEFAULT_PAGE_SIZE)
+      limit(options?.limitCount || DEFAULT_PAGE_SIZE)
     );
     const snapshot = await getDocs(q);
     return snapshot.docs

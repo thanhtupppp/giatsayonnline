@@ -6,7 +6,7 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions, Stepper, Step, StepLabel,
   TextField, InputAdornment
 } from '@mui/material';
-import { Visibility, Search, Print, Warning, NavigateNext, NavigateBefore } from '@mui/icons-material';
+import { Visibility, Search, Print, Warning, NavigateNext, NavigateBefore, Delete } from '@mui/icons-material';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
@@ -14,10 +14,11 @@ import { useAuth } from '../../contexts/AuthContext';
 import { donHangService } from '../../services/donHangService';
 import { userService } from '../../services/userService';
 import type { DonHang } from '../../types';
-import { TrangThaiDonHang } from '../../types';
+import { TrangThaiDonHang, VaiTro } from '../../types';
 import { TRANG_THAI_LABELS, TRANG_THAI_COLORS, formatCurrency, getStatusTransitionsForRole, VALID_STATUS_TRANSITIONS } from '../../utils/constants';
 import { logError, getUserMessage } from '../../utils/errorHandler';
 import { printService } from '../../services/printService';
+import { khachHangService } from '../../services/khachHangService';
 
 export default function DonHangPage() {
   const { userProfile } = useAuth();
@@ -32,8 +33,14 @@ export default function DonHangPage() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [selected, setSelected] = useState<DonHang | null>(null);
 
+  // Delete control
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [orderToDelete, setOrderToDelete] = useState<DonHang | null>(null);
+
   // Employee name mapping: uid → hoTen
   const [employeeMap, setEmployeeMap] = useState<Record<string, string>>({});
+  // Customer mapping: maKhachHang → { hoTen, soDienThoai }
+  const [customerMap, setCustomerMap] = useState<Record<string, { hoTen: string; soDienThoai: string }>>({}); 
 
   // Yêu Cầu 11: Pagination state
   const [hasMore, setHasMore] = useState(false);
@@ -44,7 +51,7 @@ export default function DonHangPage() {
     setLoading(true);
     try {
       const maCuaHang = userProfile?.maCuaHang || '';
-      const [result, employees] = await Promise.all([
+      const [result, employees, customers] = await Promise.all([
         donHangService.getByMaCuaHangPaginated(
           maCuaHang,
           {
@@ -53,6 +60,7 @@ export default function DonHangPage() {
           }
         ),
         userService.getByMaCuaHang(maCuaHang),
+        khachHangService.getByMaCuaHang(maCuaHang),
       ]);
       setDonHangs(result.data);
       setHasMore(result.hasMore);
@@ -64,6 +72,10 @@ export default function DonHangPage() {
       const map: Record<string, string> = {};
       employees.forEach(e => { map[e.uid] = e.hoTen; });
       setEmployeeMap(map);
+      // Build customer maKhachHang → { hoTen, soDienThoai } map
+      const custMap: Record<string, { hoTen: string; soDienThoai: string }> = {};
+      customers.forEach(c => { custMap[c.maKhachHang] = { hoTen: c.hoTen, soDienThoai: c.soDienThoai }; });
+      setCustomerMap(custMap);
     } catch (err) {
       logError(err, 'DonHangPage.loadData');
       toast.error(getUserMessage(err));
@@ -94,8 +106,13 @@ export default function DonHangPage() {
   const filteredOrders = donHangs.filter((dh) => {
     // Search by maDonHang or maKhachHang
     if (searchPhone.trim()) {
-      const s = searchPhone.trim().toUpperCase();
-      if (!dh.maKhachHang.toUpperCase().includes(s) && !dh.maDonHang.toUpperCase().includes(s)) return false;
+      const s = searchPhone.trim().toLowerCase();
+      const sUpper = s.toUpperCase();
+      const custInfo = customerMap[dh.maKhachHang];
+      const matchCode = dh.maDonHang.toUpperCase().includes(sUpper);
+      const matchCustName = custInfo?.hoTen?.toLowerCase().includes(s);
+      const matchCustPhone = custInfo?.soDienThoai?.includes(searchPhone.trim());
+      if (!matchCode && !matchCustName && !matchCustPhone) return false;
     }
     // Date range filter
     if (filterDateFrom && dh.ngayTao?.toDate) {
@@ -113,9 +130,15 @@ export default function DonHangPage() {
     return true;
   });
 
-  const handleUpdateStatus = async (id: string, newStatus: TrangThaiDonHang) => {
+  const handleUpdateStatus = async (id: string, newStatus: TrangThaiDonHang, isAdminOverride = false) => {
     try {
-      await donHangService.updateStatus(id, newStatus, userProfile?.uid || '');
+      await donHangService.updateStatus(
+        id,
+        newStatus,
+        userProfile?.uid || '',
+        isAdminOverride ? 'Admin sửa trạng thái' : undefined,
+        isAdminOverride ? vaiTro : undefined
+      );
       toast.success('Cập nhật trạng thái thành công');
 
       // #8: Notify when HOAN_THANH or DA_GIAO
@@ -156,6 +179,31 @@ export default function DonHangPage() {
         toast.error(getUserMessage(err));
       }
     }
+  };
+
+  const handleDeleteOrder = async () => {
+    if (!orderToDelete) return;
+    try {
+      await donHangService.delete(orderToDelete.maDonHang);
+      toast.success('Xóa đơn hàng thành công');
+      setDeleteConfirmOpen(false);
+      setOrderToDelete(null);
+      loadData();
+    } catch (err) {
+      logError(err, 'DonHangPage.handleDeleteOrder', { id: orderToDelete.maDonHang });
+      toast.error(getUserMessage(err));
+    }
+  };
+
+  // Admin edit status control
+  const [editConfirmOpen, setEditConfirmOpen] = useState(false);
+  const [statusToEdit, setStatusToEdit] = useState<TrangThaiDonHang | null>(null);
+
+  const confirmAdminEditStatus = async () => {
+    if (!selected || !statusToEdit) return;
+    await handleUpdateStatus(selected.maDonHang, statusToEdit, true);
+    setEditConfirmOpen(false);
+    setStatusToEdit(null);
   };
 
   const formatDate = (timestamp: any) => {
@@ -249,7 +297,7 @@ export default function DonHangPage() {
             <TableHead>
               <TableRow sx={{ bgcolor: 'grey.50' }}>
                 <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Mã đơn</TableCell>
-                <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Ngày tạo</TableCell>
+                <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Khách hàng</TableCell>
                 <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap', display: { xs: 'none', md: 'table-cell' } }}>Hẹn trả</TableCell>
                 <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap', display: { xs: 'none', sm: 'table-cell' } }}>Tổng tiền</TableCell>
                 <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap', display: { xs: 'none', sm: 'table-cell' } }}>Đã trả</TableCell>
@@ -272,7 +320,16 @@ export default function DonHangPage() {
                         sx={{ ml: 1, height: 22, fontSize: '0.65rem' }} />
                     )}
                   </TableCell>
-                  <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatDate(dh.ngayTao)}</TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                    {customerMap[dh.maKhachHang] ? (
+                      <Box>
+                        <Typography variant="body2" fontWeight={600} noWrap>{customerMap[dh.maKhachHang].hoTen}</Typography>
+                        <Typography variant="caption" color="text.secondary">{customerMap[dh.maKhachHang].soDienThoai}</Typography>
+                      </Box>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">-</Typography>
+                    )}
+                  </TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap', display: { xs: 'none', md: 'table-cell' } }}>{formatDate(dh.ngayHenTra)}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap', display: { xs: 'none', sm: 'table-cell' } }}>{dh.tongTien > 0 ? formatCurrency(dh.tongTien) : <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>Chưa XĐ</Typography>}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap', display: { xs: 'none', sm: 'table-cell' } }}>{formatCurrency(dh.tienDaTra)}</TableCell>
@@ -291,6 +348,11 @@ export default function DonHangPage() {
                     <IconButton size="small" color="secondary" title="In phiếu" onClick={() => { handlePrint(dh); }}>
                       <Print fontSize="small" />
                     </IconButton>
+                    {(vaiTro === VaiTro.ADMIN || vaiTro === VaiTro.SUPER_ADMIN) && (
+                      <IconButton size="small" color="error" title="Xóa đơn" onClick={() => { setOrderToDelete(dh); setDeleteConfirmOpen(true); }}>
+                        <Delete fontSize="small" />
+                      </IconButton>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -342,9 +404,19 @@ export default function DonHangPage() {
               </Box>
             </DialogTitle>
             <DialogContent>
+              {/* Customer info */}
+              {customerMap[selected.maKhachHang] ? (
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  👤 Khách hàng: <strong>{customerMap[selected.maKhachHang].hoTen}</strong> — {customerMap[selected.maKhachHang].soDienThoai}
+                </Typography>
+              ) : (
+                <Typography variant="body2" sx={{ mb: 1 }} color="text.secondary">
+                  👤 Khách hàng: <em>{selected.maKhachHang}</em>
+                </Typography>
+              )}
               {/* Employee info */}
               <Typography variant="body2" sx={{ mb: 2 }}>
-                👤 Nhân viên tiếp nhận: <strong>{employeeMap[selected.maNhanVien] || selected.maNhanVien || '-'}</strong>
+                💼 Nhân viên tiếp nhận: <strong>{employeeMap[selected.maNhanVien] || selected.maNhanVien || '-'}</strong>
               </Typography>
               {selected.trangThai !== TrangThaiDonHang.DA_HUY ? (
                 <Stepper activeStep={getActiveStep(selected.trangThai)} alternativeLabel sx={{ mb: 3 }}>
@@ -433,6 +505,36 @@ export default function DonHangPage() {
                   </Box>
                 </Box>
               ) : null}
+
+              {/* Admin Override: Allow changing to ANY status */}
+              {(vaiTro === VaiTro.ADMIN || vaiTro === VaiTro.SUPER_ADMIN) && (
+                <Box sx={{ mt: 3, p: 2, bgcolor: 'error.50', borderRadius: 2, border: '1px dashed', borderColor: 'error.main' }}>
+                  <Typography variant="subtitle2" color="error.main" gutterBottom>⚠️ Sửa trạng thái bất kỳ (Admin)</Typography>
+                  <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                    <FormControl size="small" sx={{ minWidth: 200, bgcolor: 'white' }}>
+                      <InputLabel>Chọn trạng thái</InputLabel>
+                      <Select
+                        value={statusToEdit || ''}
+                        label="Chọn trạng thái"
+                        onChange={(e) => setStatusToEdit(e.target.value as TrangThaiDonHang)}
+                      >
+                        {Object.entries(TRANG_THAI_LABELS).map(([k, v]) => (
+                          <MenuItem key={k} value={k} disabled={k === selected.trangThai}>
+                            {v}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                    <Button
+                      variant="contained" color="error" size="small"
+                      disabled={!statusToEdit}
+                      onClick={() => setEditConfirmOpen(true)}
+                    >
+                      Xác nhận sửa
+                    </Button>
+                  </Box>
+                </Box>
+              )}
             </DialogContent>
             <DialogActions>
               <Button startIcon={<Print />} onClick={() => { handlePrint(); setDetailOpen(false); }}>In phiếu (Gửi đến máy in)</Button>
@@ -440,6 +542,44 @@ export default function DonHangPage() {
             </DialogActions>
           </>
         ) : null}
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)}>
+        <DialogTitle>Xác nhận xóa đơn hàng</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Bạn có chắc chắn muốn xóa đơn hàng <strong>{orderToDelete?.maDonHang}</strong> không?
+            Hành động này không thể hoàn tác.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteConfirmOpen(false)}>Hủy</Button>
+          <Button onClick={handleDeleteOrder} color="error" variant="contained">
+            Xóa
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Edit Status Confirmation Dialog */}
+      <Dialog open={editConfirmOpen} onClose={() => setEditConfirmOpen(false)}>
+        <DialogTitle>Xác nhận sửa trạng thái đơn hàng</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Bạn đang thay đổi trạng thái đơn hàng <strong>{selected?.maDonHang}</strong> từ{' '}
+            <strong>{selected ? TRANG_THAI_LABELS[selected.trangThai] : ''}</strong> sang{' '}
+            <strong style={{ color: 'red' }}>{statusToEdit ? TRANG_THAI_LABELS[statusToEdit] : ''}</strong>.
+          </Typography>
+          <Typography sx={{ mt: 1 }} color="text.secondary" variant="body2">
+            Lưu ý: Hành động này dành cho Admin để sửa sai sót. Lịch sử trạng thái sẽ ghi nhận sự thay đổi này.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => { setEditConfirmOpen(false); setStatusToEdit(null); }}>Hủy</Button>
+          <Button onClick={confirmAdminEditStatus} color="error" variant="contained">
+            Đồng ý sửa
+          </Button>
+        </DialogActions>
       </Dialog>
 
     </Box>

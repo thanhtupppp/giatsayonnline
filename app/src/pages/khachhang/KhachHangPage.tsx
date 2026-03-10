@@ -4,13 +4,13 @@ import {
   TableHead, TableRow, Paper, Chip, TextField, Dialog, DialogTitle,
   DialogContent, DialogActions, IconButton, CircularProgress, InputAdornment,
 } from '@mui/material';
-import { Add, Edit, Search, Star, History, NavigateNext, NavigateBefore } from '@mui/icons-material';
+import { Add, Edit, Search, Star, History, NavigateNext, NavigateBefore, Delete } from '@mui/icons-material';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { khachHangService } from '../../services/khachHangService';
 import { donHangService } from '../../services/donHangService';
 import type { KhachHang, DonHang } from '../../types';
-import { LoaiKhachHang } from '../../types';
+import { LoaiKhachHang, VaiTro } from '../../types';
 import { formatCurrency, formatPhone, TRANG_THAI_LABELS, TRANG_THAI_COLORS } from '../../utils/constants';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
@@ -28,6 +28,11 @@ export default function KhachHangPage() {
   const [khachHangs, setKhachHangs] = useState<KhachHang[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchPhone, setSearchPhone] = useState('');
+  const vaiTro = userProfile?.vaiTro;
+
+  // Delete control
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [customerToDelete, setCustomerToDelete] = useState<KhachHang | null>(null);
 
   // Yêu Cầu 11: Pagination state
   const [hasMore, setHasMore] = useState(false);
@@ -123,6 +128,19 @@ export default function KhachHangPage() {
       handleCloseDialog();
       loadData();
     } catch { toast.error(isEdit ? 'Lỗi cập nhật' : 'Lỗi thêm khách hàng'); }
+  };
+
+  const handleDeleteCustomer = async () => {
+    if (!customerToDelete) return;
+    try {
+      await khachHangService.delete(customerToDelete.maKhachHang);
+      toast.success('Xóa khách hàng thành công');
+      setDeleteConfirmOpen(false);
+      setCustomerToDelete(null);
+      loadData();
+    } catch {
+      toast.error('Lỗi khi xóa khách hàng');
+    }
   };
 
   const openCreate = () => {
@@ -230,6 +248,9 @@ export default function KhachHangPage() {
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>
                     <IconButton size="small" color="primary" onClick={() => openEdit(kh)} title="Sửa thông tin"><Edit fontSize="small" /></IconButton>
                     <IconButton size="small" color="secondary" onClick={() => openHistory(kh)} title="Lịch sử giao dịch"><History fontSize="small" /></IconButton>
+                    {(vaiTro === VaiTro.ADMIN || vaiTro === VaiTro.SUPER_ADMIN) && (
+                      <IconButton size="small" color="error" onClick={() => { setCustomerToDelete(kh); setDeleteConfirmOpen(true); }} title="Xóa khách hàng"><Delete fontSize="small" /></IconButton>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -330,6 +351,23 @@ export default function KhachHangPage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setHistoryOpen(false)}>Đóng</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)}>
+        <DialogTitle>Xác nhận xóa khách hàng</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Bạn có chắc chắn muốn xóa khách hàng <strong>{customerToDelete?.hoTen}</strong> ({customerToDelete?.soDienThoai}) không?
+            Hành động này không thể hoàn tác.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteConfirmOpen(false)}>Hủy</Button>
+          <Button onClick={handleDeleteCustomer} color="error" variant="contained">
+            Xóa
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>

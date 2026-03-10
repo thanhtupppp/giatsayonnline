@@ -10,6 +10,7 @@ import {
   where,
   orderBy,
   limit,
+  onSnapshot,
   Timestamp,
   QueryConstraint,
   type DocumentSnapshot,
@@ -17,7 +18,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import type { DonHang, LichSuTrangThai, ChiTietDichVu } from '../types';
-import { TrangThaiDonHang, CheDoTaoDonHang } from '../types';
+import { TrangThaiDonHang, CheDoTaoDonHang, VaiTro } from '../types';
 import { isValidStatusTransition } from '../utils/constants';
 import { format } from 'date-fns';
 import { khachHangService } from './khachHangService';
@@ -204,29 +205,36 @@ export const donHangService = {
     };
   },
 
-  // Added for Requirements #5: Customer transaction history
   async getByKhachHang(maKhachHang: string): Promise<DonHang[]> {
     const q = query(
       collection(db, COLLECTION),
-      where('maKhachHang', '==', maKhachHang),
-      orderBy('ngayTao', 'desc')
+      where('maKhachHang', '==', maKhachHang)
     );
     const snapshot = await getDocs(q);
-    return snapshot.docs.map((d) => d.data() as DonHang);
+    return snapshot.docs
+      .map((d) => d.data() as DonHang)
+      .sort((a, b) => {
+        const ta = a.ngayTao?.toDate?.() || new Date(0);
+        const tb = b.ngayTao?.toDate?.() || new Date(0);
+        return tb.getTime() - ta.getTime();
+      });
   },
 
   async updateStatus(
     id: string,
     newStatus: TrangThaiDonHang,
     userId: string,
-    ghiChu?: string
+    ghiChu?: string,
+    vaiTro?: VaiTro
   ): Promise<void> {
     const docId = await donHangService._resolveDocId(id);
     const docSnap = await getDoc(doc(db, COLLECTION, docId));
     if (!docSnap.exists()) throw new Error('Đơn hàng không tồn tại');
 
     const current = docSnap.data() as DonHang;
-    if (!isValidStatusTransition(current.trangThai, newStatus)) {
+    const isAdmin = vaiTro === VaiTro.ADMIN || vaiTro === VaiTro.SUPER_ADMIN;
+
+    if (!isAdmin && !isValidStatusTransition(current.trangThai, newStatus)) {
       throw new Error(`Không thể chuyển từ ${current.trangThai} sang ${newStatus}`);
     }
 
@@ -308,5 +316,33 @@ export const donHangService = {
   async delete(id: string): Promise<void> {
     const docId = await donHangService._resolveDocId(id);
     await deleteDoc(doc(db, COLLECTION, docId));
+  },
+
+  /**
+   * Real-time listener for orders by maCuaHang.
+   * Calls `callback` with the latest orders whenever Firestore data changes.
+   * Returns an unsubscribe function.
+   */
+  listenByMaCuaHang(
+    maCuaHang: string,
+    callback: (orders: DonHang[]) => void,
+    limitCount = 200
+  ): () => void {
+    const q = query(
+      collection(db, COLLECTION),
+      where('maCuaHang', '==', maCuaHang),
+      limit(limitCount)
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const orders = snapshot.docs
+        .map((d) => d.data() as DonHang)
+        .sort((a, b) => {
+          const ta = a.ngayTao?.toDate?.() || new Date(0);
+          const tb = b.ngayTao?.toDate?.() || new Date(0);
+          return tb.getTime() - ta.getTime();
+        });
+      callback(orders);
+    });
+    return unsubscribe;
   },
 };

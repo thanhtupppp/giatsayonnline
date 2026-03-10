@@ -1,8 +1,9 @@
 import { Box, Typography, Paper } from '@mui/material';
 import { QRCodeSVG } from 'qrcode.react';
-import { formatCurrency } from '../../utils/constants';
+import { formatCurrency, removeVietnameseTones } from '../../utils/constants';
 
 interface BankQRCodeProps {
+  maNganHang?: string; // BIN for VietQR
   tenNganHang: string;
   soTaiKhoan: string;
   chuTaiKhoan: string;
@@ -15,8 +16,16 @@ interface BankQRCodeProps {
  * Uses VietQR-style format: bank info + amount + order reference
  * Customer scans with banking app → staff confirms manually
  */
-export default function BankQRCode({ tenNganHang, soTaiKhoan, chuTaiKhoan, soTien, maDonHang }: BankQRCodeProps) {
-  // VietQR-compatible transfer info string
+export default function BankQRCode({ maNganHang, tenNganHang, soTaiKhoan, chuTaiKhoan, soTien, maDonHang }: BankQRCodeProps) {
+  // Generate VietQR URL if BIN is available (Napas247 strictly requires ascii uppercase for accountName and addInfo)
+  const safeAccountName = encodeURIComponent(removeVietnameseTones(chuTaiKhoan));
+  const safeAddInfo = encodeURIComponent(removeVietnameseTones(maDonHang));
+  
+  const qrUrl = maNganHang 
+    ? `https://img.vietqr.io/image/${maNganHang}-${soTaiKhoan}-compact.png?amount=${soTien}&addInfo=${safeAddInfo}&accountName=${safeAccountName}`
+    : '';
+
+  // Fallback text QR Code for older configs without maNganHang (BIN)
   const qrContent = [
     `Ngan hang: ${tenNganHang}`,
     `STK: ${soTaiKhoan}`,
@@ -32,13 +41,17 @@ export default function BankQRCode({ tenNganHang, soTaiKhoan, chuTaiKhoan, soTie
       </Typography>
 
       <Box sx={{ display: 'flex', justifyContent: 'center', my: 2 }}>
-        <QRCodeSVG
-          value={qrContent}
-          size={180}
-          level="M"
-          includeMargin
-          style={{ borderRadius: 8 }}
-        />
+        {qrUrl ? (
+          <img src={qrUrl} alt="VietQR" style={{ width: 220, borderRadius: 8, objectFit: 'contain' }} />
+        ) : (
+          <QRCodeSVG
+            value={qrContent}
+            size={180}
+            level="M"
+            includeMargin
+            style={{ borderRadius: 8 }}
+          />
+        )}
       </Box>
 
       <Box sx={{ textAlign: 'left', bgcolor: 'grey.50', borderRadius: 2, p: 1.5, fontSize: '0.85rem' }}>

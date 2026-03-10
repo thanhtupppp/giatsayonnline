@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useMemo } from 'react';
+import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import {
   Box, Typography, Card, CardContent, Grid, Button, TextField,
   Chip, IconButton, Paper, Divider, CircularProgress,
@@ -39,6 +39,7 @@ export default function POSPage() {
   const navigate = useNavigate();
   const maCuaHang = userProfile?.maCuaHang || '';
   const phoneInputRef = useRef<HTMLInputElement>(null);
+  const lookupInputRef = useRef<HTMLInputElement>(null);
 
   // POS Tabs: 0=Tạo đơn, 1=Giặt xong, 2=Trả đồ
   const [posTab, setPosTab] = useState(0);
@@ -88,7 +89,7 @@ export default function POSPage() {
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
 
   // YC 17: Bank info for QR payment
-  const [bankInfo, setBankInfo] = useState<{ tenNganHang: string; soTaiKhoan: string; chuTaiKhoan: string } | null>(null);
+  const [bankInfo, setBankInfo] = useState<{ maNganHang: string; tenNganHang: string; soTaiKhoan: string; chuTaiKhoan: string } | null>(null);
 
   // Tab 1+2: Order lookup
   const [lookupCode, setLookupCode] = useState('');
@@ -135,12 +136,19 @@ export default function POSPage() {
         console.error('[POS] Failed to load customers:', err);
       }
 
-      // TC 20+21: Load recent orders + today stats
-      await loadRecentAndStats();
       setLoading(false);
     };
     load();
   }, []);
+
+  // Real-time listener for orders — auto-sync badge counts, recent orders, today stats
+  useEffect(() => {
+    if (!maCuaHang) return;
+    const unsubscribe = donHangService.listenByMaCuaHang(maCuaHang, (orders) => {
+      updateStatsFromOrders(orders);
+    });
+    return () => unsubscribe();
+  }, [maCuaHang]);
 
   // ---- REMOTE PRINTING LOGIC (DISABLED FOR STANDALONE SERVER) ----
   // 1. PC listens to print queue 
@@ -216,50 +224,81 @@ export default function POSPage() {
   // -------------------------------
   // -------------------------------
 
-  // TC 20+21: Load recent orders and today's statistics + badge counts
-  const loadRecentAndStats = async () => {
-    try {
-      const orders = await donHangService.getByMaCuaHang(maCuaHang, { limitCount: 200 });
-      setRecentOrders(orders.slice(0, 5));
+  // TC 20+21: Update stats from orders array (pure calculation, used by real-time listener)
+  const updateStatsFromOrders = (orders: DonHang[]) => {
+    setRecentOrders(orders.slice(0, 5));
 
-      // Calculate today's stats
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const todayOrders = orders.filter((o) => {
-        const orderDate = o.ngayTao?.toDate ? o.ngayTao.toDate() : new Date(0);
-        return orderDate >= today;
-      });
-      setTodayStats({
-        count: todayOrders.length,
-        revenue: todayOrders.reduce((sum, o) => sum + o.tienDaTra, 0),
-      });
+    // Calculate today's stats
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayOrders = orders.filter((o) => {
+      const orderDate = o.ngayTao?.toDate ? o.ngayTao.toDate() : new Date(0);
+      return orderDate >= today;
+    });
+    setTodayStats({
+      count: todayOrders.length,
+      revenue: todayOrders.reduce((sum, o) => sum + o.tienDaTra, 0),
+    });
 
-      // Badge counts
-      const washStatuses = [
-        TrangThaiDonHang.CHO_XU_LY, TrangThaiDonHang.CHO_CAN_KY,
-        TrangThaiDonHang.DANG_GIAT, TrangThaiDonHang.DANG_SAY, TrangThaiDonHang.DANG_UI,
-      ];
-      setPendingWashCount(orders.filter((o) => washStatuses.includes(o.trangThai)).length);
-      setPendingReturnCount(orders.filter((o) => o.trangThai === TrangThaiDonHang.HOAN_THANH).length);
-    } catch {
-      // Non-critical, don't block UI
-    }
+    // Badge counts
+    const washStatuses = [
+      TrangThaiDonHang.CHO_XU_LY, TrangThaiDonHang.CHO_CAN_KY,
+      TrangThaiDonHang.DANG_GIAT, TrangThaiDonHang.DANG_SAY, TrangThaiDonHang.DANG_UI,
+    ];
+    setPendingWashCount(orders.filter((o) => washStatuses.includes(o.trangThai)).length);
+    setPendingReturnCount(orders.filter((o) => o.trangThai === TrangThaiDonHang.HOAN_THANH).length);
   };
 
-  // TC 19: Keyboard shortcuts
+  // Helper: switch tab and auto-focus the relevant input
+  const switchTab = useCallback((tab: number) => {
+    setPosTab(tab);
+    if (tab !== 0) {
+      setLookupOrder(null);
+      setLookupCode('');
+      setLookupCustomer(null);
+    }
+    // Auto-focus the relevant input after React re-renders
+    setTimeout(() => {
+      if (tab === 0) {
+        phoneInputRef.current?.focus();
+      } else {
+        lookupInputRef.current?.focus();
+      }
+    }, 100);
+  }, []);
+
+  // TC 19: Consolidated keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Allow Escape from any input to blur
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
         if (e.key === 'Escape') {
           (e.target as HTMLElement).blur();
           e.preventDefault();
+          return;
         }
+        // F1/F2/F3 should work even from within an input
+        if (e.key === 'F1' || e.key === 'F2' || e.key === 'F3') {
+          e.preventDefault();
+          const tab = e.key === 'F1' ? 0 : e.key === 'F2' ? 1 : 2;
+          switchTab(tab);
+          return;
+        }
+        // Other shortcuts should not fire from within inputs
         return;
       }
       switch (e.key) {
+        case 'F1':
+          e.preventDefault();
+          switchTab(0);
+          break;
         case 'F2':
           e.preventDefault();
-          phoneInputRef.current?.focus();
+          switchTab(1);
+          break;
+        case 'F3':
+          e.preventDefault();
+          switchTab(2);
           break;
         case 'F4':
           e.preventDefault();
@@ -279,7 +318,7 @@ export default function POSPage() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [customer, cart, printOpen, paymentOpen]);
+  }, [customer, cart, printOpen, paymentOpen, switchTab]);
 
   // Vietnamese accent-insensitive search helper
   const removeAccents = (str: string) =>
@@ -468,7 +507,7 @@ export default function POSPage() {
       setCustomer(null);
       setSearchText('');
       // Refresh stats
-      loadRecentAndStats();
+      // Stats auto-updated by real-time listener
     } catch (err) {
       logError(err, 'POSPage.handleCreateOrder');
       toast.error(getUserMessage(err));
@@ -504,7 +543,7 @@ export default function POSPage() {
       toast.success(`Thanh toán ${formatCurrency(soTienThanhToan)} thành công!`);
       setPaymentOpen(false);
       setPrintOpen(true);
-      loadRecentAndStats();
+      // Stats auto-updated by real-time listener
     } catch (err) {
       logError(err, 'POSPage.handlePayment');
       toast.error(getUserMessage(err));
@@ -625,60 +664,49 @@ export default function POSPage() {
       const updated = await donHangService.getById(lookupOrder.maDonHang);
       setLookupOrder(updated);
       setAddServiceCart([]);
-      loadRecentAndStats();
+      // Stats auto-updated by real-time listener
     } catch (err) {
       logError(err, 'POSPage.handleMarkDone');
       toast.error(getUserMessage(err));
     }
   };
 
-  // Tab 2: Return clothes (DA_GIAO)
+  // Tab 2: Return clothes (DA_GIAO) — auto-pay remaining balance + mark returned in one step
   const handleReturnClothes = async () => {
     if (!lookupOrder) return;
+    setPaying(true);
     try {
+      // Step 1: Auto-pay remaining balance if any
+      if (lookupOrder.tienConLai > 0) {
+        const isBankTransfer = paymentMethod === PhuongThucThanhToan.CHUYEN_KHOAN;
+        const amount = isBankTransfer ? lookupOrder.tienConLai : Number(paymentAmount);
+        const soTienThanhToan = amount > 0 ? Math.min(amount, lookupOrder.tienConLai) : lookupOrder.tienConLai;
+
+        await giaoDichService.processPayment({
+          maDonHang: lookupOrder.maDonHang,
+          maCuaHang,
+          maKhachHang: lookupOrder.maKhachHang,
+          soTien: soTienThanhToan,
+          phuongThucThanhToan: paymentMethod,
+          maNhanVien: userProfile?.uid || '',
+        });
+        toast.success(`Thanh toán ${formatCurrency(soTienThanhToan)} thành công!`);
+      }
+
+      // Step 2: Mark as returned
       await donHangService.updateStatus(
         lookupOrder.maDonHang,
         TrangThaiDonHang.DA_GIAO,
         userProfile?.uid || '',
-        'Trả đồ cho KH — POS'
+        'Thanh toán & Trả đồ cho KH — POS'
       );
       toast.success('Đã trả đồ cho khách hàng! 🎉');
       const updated = await donHangService.getById(lookupOrder.maDonHang);
       setLookupOrder(updated);
-      loadRecentAndStats();
+      setPaymentAmount('');
+      // Stats auto-updated by real-time listener
     } catch (err) {
       logError(err, 'POSPage.handleReturnClothes');
-      toast.error(getUserMessage(err));
-    }
-  };
-
-  // Tab 2: Process payment for existing order
-  const handleLookupPayment = async () => {
-    if (!lookupOrder) return;
-    // Chuyển khoản: tự động thanh toán toàn bộ số tiền còn lại
-    const isBankTransfer = paymentMethod === PhuongThucThanhToan.CHUYEN_KHOAN;
-    const amount = isBankTransfer ? lookupOrder.tienConLai : Number(paymentAmount);
-    if (amount <= 0) {
-      toast.error('Vui lòng nhập số tiền');
-      return;
-    }
-    setPaying(true);
-    try {
-      const soTienThanhToan = Math.min(amount, lookupOrder.tienConLai);
-      await giaoDichService.processPayment({
-        maDonHang: lookupOrder.maDonHang,
-        maCuaHang,
-        maKhachHang: lookupOrder.maKhachHang,
-        soTien: soTienThanhToan,
-        phuongThucThanhToan: paymentMethod,
-        maNhanVien: userProfile?.uid || '',
-      });
-      const updated = await donHangService.getById(lookupOrder.maDonHang);
-      setLookupOrder(updated);
-      toast.success(`Thanh toán ${formatCurrency(soTienThanhToan)} thành công!`);
-      setPaymentAmount('');
-    } catch (err) {
-      logError(err, 'POSPage.handleLookupPayment');
       toast.error(getUserMessage(err));
     }
     setPaying(false);
@@ -755,6 +783,7 @@ export default function POSPage() {
         </Typography>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <TextField
+            inputRef={lookupInputRef}
             size="small" fullWidth
             placeholder="Nhập mã đơn hàng..."
             value={lookupCode}
@@ -805,12 +834,15 @@ export default function POSPage() {
           )}
           {lookupOrder.danhSachDichVu.length > 0 ? (
             <Box sx={{ mt: 1 }}>
-              {lookupOrder.danhSachDichVu.map((dv, i) => (
-                <Box key={i} sx={{ display: 'flex', justifyContent: 'space-between', py: 0.5 }}>
-                  <Typography variant="body2">{dv.tenDichVu} {dv.trongLuong > 0 ? `(${dv.trongLuong}kg)` : `x${dv.soLuong}`}</Typography>
-                  <Typography variant="body2" fontWeight={600}>{formatCurrency(dv.thanhTien)}</Typography>
-                </Box>
-              ))}
+              {/* Scrollable service list — limits height to prevent pushing buttons off screen */}
+              <Box sx={{ maxHeight: 200, overflow: 'auto' }}>
+                {lookupOrder.danhSachDichVu.map((dv, i) => (
+                  <Box key={i} sx={{ display: 'flex', justifyContent: 'space-between', py: 0.5 }}>
+                    <Typography variant="body2">{dv.tenDichVu} {dv.trongLuong > 0 ? `(${dv.trongLuong}kg)` : `x${dv.soLuong}`}</Typography>
+                    <Typography variant="body2" fontWeight={600}>{formatCurrency(dv.thanhTien)}</Typography>
+                  </Box>
+                ))}
+              </Box>
               <Divider sx={{ my: 1 }} />
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                 <Typography fontWeight={700}>Tổng cộng</Typography>
@@ -833,16 +865,7 @@ export default function POSPage() {
     );
   };
 
-  // Keyboard shortcuts: F1 = Tạo đơn, F2 = Giặt xong, F3 = Trả đồ
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'F1') { e.preventDefault(); setPosTab(0); }
-      if (e.key === 'F2') { e.preventDefault(); setPosTab(1); }
-      if (e.key === 'F3') { e.preventDefault(); setPosTab(2); }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  // Keyboard shortcuts are now consolidated in the single useEffect above
 
   if (loading) {
     return <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>;
@@ -900,7 +923,7 @@ export default function POSPage() {
         {/* Tạo đơn - Green (F1) */}
         <Button
           variant={posTab === 0 ? 'contained' : 'outlined'}
-          onClick={() => { setPosTab(0); setLookupOrder(null); setLookupCode(''); setLookupCustomer(null); }}
+          onClick={() => switchTab(0)}
           startIcon={<Add sx={{ fontSize: { xs: 20, sm: 24 } }} />}
           sx={{
             flex: 1, minHeight: { xs: 44, sm: 56 }, fontSize: { xs: 13, sm: 16 }, fontWeight: 700,
@@ -930,7 +953,7 @@ export default function POSPage() {
         >
           <Button
             variant={posTab === 1 ? 'contained' : 'outlined'}
-            onClick={() => { setPosTab(1); setLookupOrder(null); setLookupCode(''); setLookupCustomer(null); }}
+            onClick={() => switchTab(1)}
             startIcon={<CheckCircle sx={{ fontSize: { xs: 20, sm: 24 } }} />}
             fullWidth
             sx={{
@@ -962,7 +985,7 @@ export default function POSPage() {
         >
           <Button
             variant={posTab === 2 ? 'contained' : 'outlined'}
-            onClick={() => { setPosTab(2); setLookupOrder(null); setLookupCode(''); setLookupCustomer(null); }}
+            onClick={() => switchTab(2)}
             startIcon={<LocalShipping sx={{ fontSize: { xs: 20, sm: 24 } }} />}
             fullWidth
             sx={{
@@ -981,11 +1004,11 @@ export default function POSPage() {
       </Box>
 
       {/* Main POS content */}
-      <Box sx={{ flex: 1, overflow: 'hidden', p: { xs: 1, sm: 2 }, display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ flex: 1, overflow: 'hidden', p: { xs: 0.5, sm: 1.5 }, display: 'flex', flexDirection: 'column' }}>
 
       {/* ===== TAB 0: TẠO ĐƠN ===== */}
       {posTab === 0 && (
-      <Box sx={{ display: 'flex', gap: 2, flex: 1, flexDirection: { xs: 'column', md: 'row' }, overflow: { xs: 'hidden', md: 'hidden' } }}>
+      <Box sx={{ display: 'flex', gap: 1.5, flex: 1, flexDirection: { xs: 'column', md: 'row' }, overflow: { xs: 'hidden', md: 'hidden' } }}>
         {/* Left: Customer + Services */}
         <Box sx={{ flex: 1, overflow: 'auto', minHeight: { xs: '40vh', md: 0 } }}>
           {/* Mode indicator — compact chip instead of large warning banner */}
@@ -1122,9 +1145,10 @@ export default function POSPage() {
           )}
         </Box>
 
-        {/* Right: Cart Sidebar */}
+        {/* Right: Cart Sidebar — compact for square POS screens */}
         <Box sx={{
-          width: { xs: '100%', md: 350 },
+          width: { xs: '100%', md: 280 },
+          minWidth: { md: 250 },
           display: 'flex', flexDirection: 'column',
           maxHeight: { xs: '50vh', md: 'none' },
           borderLeft: { md: '1px solid' }, borderTop: { xs: '1px solid', md: 'none' },
@@ -1261,177 +1285,183 @@ export default function POSPage() {
 
       {/* ===== TAB 1: BÁO GIẶT XONG ===== */}
       {posTab === 1 && (
-        <Box sx={{ flex: 1, overflow: 'auto', maxWidth: 700, mx: 'auto', width: '100%' }}>
-          {renderOrderLookup()}
-          {renderOrderInfo()}
-          {/* Mode 2: Add services for orders with empty danhSachDichVu */}
-          {lookupOrder && lookupOrder.danhSachDichVu.length === 0 && lookupOrder.trangThai !== TrangThaiDonHang.HOAN_THANH && lookupOrder.trangThai !== TrangThaiDonHang.DA_GIAO && (
-            <Card sx={{ mb: 2 }}>
-              <CardContent>
-                <Typography variant="subtitle2" gutterBottom>Thêm dịch vụ (cân ký)</Typography>
-                <Grid container spacing={1} sx={{ mb: 2 }}>
-                  {dichVus.filter(dv => dv.trangThai).map((dv) => (
-                    <Grid size={{ xs: 6, sm: 4 }} key={dv.maDichVu}>
-                      <Button
-                        fullWidth variant={addServiceCart.some(c => c.maDichVu === dv.maDichVu) ? 'contained' : 'outlined'}
-                        onClick={() => addToServiceCart(dv)}
-                        sx={{ textTransform: 'none', py: 1 }}
-                      >
-                        {dv.tenDichVu}
-                      </Button>
-                    </Grid>
-                  ))}
-                </Grid>
-                {addServiceCart.length > 0 && (
-                  <Box>
-                    {addServiceCart.map((item) => (
-                      <Box key={item.maDichVu} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 0.5 }}>
-                        <Typography variant="body2">{item.tenDichVu}</Typography>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          {item.dichVu.loaiTinhGia === LoaiTinhGia.THEO_TRONG_LUONG ? (
-                            <TextField
-                              size="small" type="number" label="Kg" value={item.trongLuong}
-                              onChange={(e) => {
-                                const w = Number(e.target.value);
-                                setAddServiceCart(addServiceCart.map(c =>
-                                  c.maDichVu === item.maDichVu ? { ...c, trongLuong: w, thanhTien: dichVuService.tinhGia(c.dichVu, c.soLuong, w) } : c
-                                ));
-                              }}
-                              sx={{ width: 80 }} inputProps={{ min: 0, step: 0.5 }}
-                            />
-                          ) : (
-                            <Typography variant="body2">x{item.soLuong}</Typography>
-                          )}
-                          <Typography variant="body2" fontWeight={700} color="primary">{formatCurrency(item.thanhTien)}</Typography>
-                          <IconButton size="small" color="error" onClick={() => setAddServiceCart(addServiceCart.filter(c => c.maDichVu !== item.maDichVu))}>
-                            <Delete fontSize="small" />
-                          </IconButton>
-                        </Box>
-                      </Box>
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', maxWidth: 700, mx: 'auto', width: '100%', overflow: 'hidden' }}>
+          {/* Scrollable content area */}
+          <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+            {renderOrderLookup()}
+            {renderOrderInfo()}
+            {/* Mode 2: Add services for orders with empty danhSachDichVu */}
+            {lookupOrder && lookupOrder.danhSachDichVu.length === 0 && lookupOrder.trangThai !== TrangThaiDonHang.HOAN_THANH && lookupOrder.trangThai !== TrangThaiDonHang.DA_GIAO && (
+              <Card sx={{ mb: 2 }}>
+                <CardContent>
+                  <Typography variant="subtitle2" gutterBottom>Thêm dịch vụ (cân ký)</Typography>
+                  <Grid container spacing={1} sx={{ mb: 2 }}>
+                    {dichVus.filter(dv => dv.trangThai).map((dv) => (
+                      <Grid size={{ xs: 6, sm: 4 }} key={dv.maDichVu}>
+                        <Button
+                          fullWidth variant={addServiceCart.some(c => c.maDichVu === dv.maDichVu) ? 'contained' : 'outlined'}
+                          onClick={() => addToServiceCart(dv)}
+                          sx={{ textTransform: 'none', py: 1 }}
+                        >
+                          {dv.tenDichVu}
+                        </Button>
+                      </Grid>
                     ))}
-                    <Divider sx={{ my: 1 }} />
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography fontWeight={700}>Tổng</Typography>
-                      <Typography fontWeight={700} color="primary">
-                        {formatCurrency(addServiceCart.reduce((s, i) => s + i.thanhTien, 0))}
-                      </Typography>
+                  </Grid>
+                  {addServiceCart.length > 0 && (
+                    <Box>
+                      {addServiceCart.map((item) => (
+                        <Box key={item.maDichVu} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 0.5 }}>
+                          <Typography variant="body2">{item.tenDichVu}</Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            {item.dichVu.loaiTinhGia === LoaiTinhGia.THEO_TRONG_LUONG ? (
+                              <TextField
+                                size="small" type="number" label="Kg" value={item.trongLuong}
+                                onChange={(e) => {
+                                  const w = Number(e.target.value);
+                                  setAddServiceCart(addServiceCart.map(c =>
+                                    c.maDichVu === item.maDichVu ? { ...c, trongLuong: w, thanhTien: dichVuService.tinhGia(c.dichVu, c.soLuong, w) } : c
+                                  ));
+                                }}
+                                sx={{ width: 80 }} inputProps={{ min: 0, step: 0.5 }}
+                              />
+                            ) : (
+                              <Typography variant="body2">x{item.soLuong}</Typography>
+                            )}
+                            <Typography variant="body2" fontWeight={700} color="primary">{formatCurrency(item.thanhTien)}</Typography>
+                            <IconButton size="small" color="error" onClick={() => setAddServiceCart(addServiceCart.filter(c => c.maDichVu !== item.maDichVu))}>
+                              <Delete fontSize="small" />
+                            </IconButton>
+                          </Box>
+                        </Box>
+                      ))}
+                      <Divider sx={{ my: 1 }} />
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography fontWeight={700}>Tổng</Typography>
+                        <Typography fontWeight={700} color="primary">
+                          {formatCurrency(addServiceCart.reduce((s, i) => s + i.thanhTien, 0))}
+                        </Typography>
+                      </Box>
                     </Box>
-                  </Box>
-                )}
-              </CardContent>
-            </Card>
-          )}
-          {/* Mark done button */}
+                  )}
+                </CardContent>
+              </Card>
+            )}
+          </Box>
+          {/* Sticky action button at bottom */}
           {lookupOrder && (
-            lookupOrder.trangThai === TrangThaiDonHang.HOAN_THANH || lookupOrder.trangThai === TrangThaiDonHang.DA_GIAO ? (
-              <Alert severity="success" sx={{ mb: 2 }}>✅ Đơn hàng đã hoàn thành</Alert>
-            ) : (
-              <Button
-                fullWidth variant="contained" size="large" color="success"
-                startIcon={<CheckCircle />}
-                onClick={handleMarkDone}
-                disabled={lookupOrder.danhSachDichVu.length === 0 && addServiceCart.length === 0}
-                sx={{ py: 1.5, fontSize: '1rem' }}
-              >
-                ✅ Báo giặt xong
-              </Button>
-            )
+            <Box sx={{ flexShrink: 0, pt: 1, pb: 1, bgcolor: 'background.default' }}>
+              {lookupOrder.trangThai === TrangThaiDonHang.HOAN_THANH || lookupOrder.trangThai === TrangThaiDonHang.DA_GIAO ? (
+                <Alert severity="success">✅ Đơn hàng đã hoàn thành</Alert>
+              ) : (
+                <Button
+                  fullWidth variant="contained" size="large" color="success"
+                  startIcon={<CheckCircle />}
+                  onClick={handleMarkDone}
+                  disabled={lookupOrder.danhSachDichVu.length === 0 && addServiceCart.length === 0}
+                  sx={{ py: 1.5, fontSize: '1rem' }}
+                >
+                  ✅ Báo giặt xong
+                </Button>
+              )}
+            </Box>
           )}
         </Box>
       )}
 
       {/* ===== TAB 2: TRẢ ĐỒ ===== */}
       {posTab === 2 && (
-        <Box sx={{ flex: 1, overflow: 'auto', maxWidth: 700, mx: 'auto', width: '100%' }}>
-          {renderOrderLookup()}
-          {renderOrderInfo()}
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', maxWidth: 700, mx: 'auto', width: '100%', overflow: 'hidden' }}>
+          {/* Scrollable content area — order info + payment details */}
+          <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+            {renderOrderLookup()}
+            {renderOrderInfo()}
+            {lookupOrder && (
+              <Box>
+                {/* Payment section */}
+                {lookupOrder.tienConLai > 0 && lookupOrder.trangThai !== TrangThaiDonHang.DA_GIAO && (
+                  <Card sx={{ mb: 1 }}>
+                    <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+                      <Typography variant="subtitle2" gutterBottom>💰 Thanh toán</Typography>
+                      {/* Payment method */}
+                      <Grid container spacing={0.5} sx={{ mb: 1 }}>
+                        {[
+                          { value: PhuongThucThanhToan.TIEN_MAT, label: 'Tiền mặt', icon: <AttachMoney /> },
+                          { value: PhuongThucThanhToan.CHUYEN_KHOAN, label: 'CK', icon: <AccountBalance /> },
+                          { value: PhuongThucThanhToan.THE_ATM, label: 'ATM', icon: <CreditCard /> },
+                          { value: PhuongThucThanhToan.VI_DIEN_TU, label: 'Ví ĐT', icon: <PhoneAndroid /> },
+                        ].map((m) => (
+                          <Grid size={3} key={m.value}>
+                            <Button
+                              fullWidth size="small"
+                              variant={paymentMethod === m.value ? 'contained' : 'outlined'}
+                              startIcon={m.icon}
+                              onClick={() => setPaymentMethod(m.value)}
+                              sx={{ py: 0.5, textTransform: 'none', fontSize: '0.7rem', minHeight: 36 }}
+                            >
+                              {m.label}
+                            </Button>
+                          </Grid>
+                        ))}
+                      </Grid>
+                      {/* QR for bank transfer */}
+                      {paymentMethod === PhuongThucThanhToan.CHUYEN_KHOAN && bankInfo && (
+                        <Box sx={{ mb: 1 }}>
+                          <BankQRCode
+                            maNganHang={bankInfo.maNganHang}
+                            tenNganHang={bankInfo.tenNganHang}
+                            soTaiKhoan={bankInfo.soTaiKhoan}
+                            chuTaiKhoan={bankInfo.chuTaiKhoan}
+                            soTien={lookupOrder.tienConLai}
+                            maDonHang={lookupOrder.maDonHang}
+                          />
+                        </Box>
+                      )}
+                      {/* Amount input — hide for bank transfer */}
+                      {paymentMethod !== PhuongThucThanhToan.CHUYEN_KHOAN && (
+                        <>
+                          <TextField
+                            fullWidth label="Số tiền" value={paymentAmount}
+                            onChange={(e) => setPaymentAmount(e.target.value.replace(/\D/g, ''))}
+                            size="small" sx={{ mb: 1 }}
+                            InputProps={{ sx: { fontSize: '1rem', fontWeight: 700 } }}
+                          />
+                          {Number(paymentAmount) > 0 && (
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1, p: 0.5, px: 1, bgcolor: 'action.hover', borderRadius: 1 }}>
+                              <Typography variant="body2">Tiền thối:</Typography>
+                              <Typography variant="body2" fontWeight={700} color="success.main">
+                                {formatCurrency(Math.max(0, Number(paymentAmount) - lookupOrder.tienConLai))}
+                              </Typography>
+                            </Box>
+                          )}
+                        </>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+              </Box>
+            )}
+          </Box>
+          {/* Sticky action buttons at bottom — always visible on POS touch screen */}
           {lookupOrder && (
-            <Box>
-              {/* Payment section */}
-              {lookupOrder.tienConLai > 0 && lookupOrder.trangThai !== TrangThaiDonHang.DA_GIAO && (
-                <Card sx={{ mb: 2 }}>
-                  <CardContent>
-                    <Typography variant="subtitle2" gutterBottom>💰 Thanh toán</Typography>
-                    {/* Payment method */}
-                    <Grid container spacing={1} sx={{ mb: 2 }}>
-                      {[
-                        { value: PhuongThucThanhToan.TIEN_MAT, label: 'Tiền mặt', icon: <AttachMoney /> },
-                        { value: PhuongThucThanhToan.CHUYEN_KHOAN, label: 'CK', icon: <AccountBalance /> },
-                        { value: PhuongThucThanhToan.THE_ATM, label: 'ATM', icon: <CreditCard /> },
-                        { value: PhuongThucThanhToan.VI_DIEN_TU, label: 'Ví ĐT', icon: <PhoneAndroid /> },
-                      ].map((m) => (
-                        <Grid size={3} key={m.value}>
-                          <Button
-                            fullWidth size="small"
-                            variant={paymentMethod === m.value ? 'contained' : 'outlined'}
-                            startIcon={m.icon}
-                            onClick={() => setPaymentMethod(m.value)}
-                            sx={{ py: 1, textTransform: 'none', fontSize: '0.75rem' }}
-                          >
-                            {m.label}
-                          </Button>
-                        </Grid>
-                      ))}
-                    </Grid>
-                    {/* QR for bank transfer */}
-                    {paymentMethod === PhuongThucThanhToan.CHUYEN_KHOAN && bankInfo && (
-                      <Box sx={{ mb: 2 }}>
-                        <BankQRCode
-                          tenNganHang={bankInfo.tenNganHang}
-                          soTaiKhoan={bankInfo.soTaiKhoan}
-                          chuTaiKhoan={bankInfo.chuTaiKhoan}
-                          soTien={lookupOrder.tienConLai}
-                          maDonHang={lookupOrder.maDonHang}
-                        />
-                      </Box>
-                    )}
-                    {/* Amount input — hide for bank transfer */}
-                    {paymentMethod !== PhuongThucThanhToan.CHUYEN_KHOAN && (
-                      <>
-                        <TextField
-                          fullWidth label="Số tiền" value={paymentAmount}
-                          onChange={(e) => setPaymentAmount(e.target.value.replace(/\D/g, ''))}
-                          sx={{ mb: 1 }}
-                          InputProps={{ sx: { fontSize: '1.2rem', fontWeight: 700 } }}
-                        />
-                        {Number(paymentAmount) > 0 && (
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1, p: 1, bgcolor: 'action.hover', borderRadius: 1 }}>
-                            <Typography variant="body2">Tiền thối:</Typography>
-                            <Typography variant="body2" fontWeight={700} color="success.main">
-                              {formatCurrency(Math.max(0, Number(paymentAmount) - lookupOrder.tienConLai))}
-                            </Typography>
-                          </Box>
-                        )}
-                      </>
-                    )}
-                    <Button
-                      fullWidth variant="contained" color="primary"
-                      onClick={handleLookupPayment}
-                      disabled={paying || (paymentMethod !== PhuongThucThanhToan.CHUYEN_KHOAN && Number(paymentAmount) <= 0)}
-                      sx={{ py: 1.5 }}
-                    >
-                      {paying ? 'Đang xử lý...' : paymentMethod === PhuongThucThanhToan.CHUYEN_KHOAN
-                        ? `Thanh toán ${formatCurrency(lookupOrder.tienConLai)}`
-                        : `Thanh toán ${paymentAmount ? formatCurrency(Number(paymentAmount)) : ''}`
-                      }
-                    </Button>
-                  </CardContent>
-                </Card>
-              )}
-              {/* Return button */}
+            <Box sx={{ flexShrink: 0, pt: 1, pb: 1, bgcolor: 'background.default', display: 'flex', flexDirection: 'column', gap: 1 }}>
               {lookupOrder.trangThai === TrangThaiDonHang.DA_GIAO ? (
-                <Alert severity="success" sx={{ mb: 2 }}>🎉 Đã trả đồ cho khách hàng</Alert>
+                <Alert severity="success">🎉 Đã thanh toán & trả đồ cho khách hàng</Alert>
               ) : lookupOrder.trangThai === TrangThaiDonHang.HOAN_THANH ? (
                 <Button
                   fullWidth variant="contained" size="large" color="success"
                   startIcon={<LocalShipping />}
                   onClick={handleReturnClothes}
-                  sx={{ py: 1.5, fontSize: '1rem' }}
+                  disabled={paying}
+                  sx={{ py: 1.5, fontSize: '1rem', minHeight: 52 }}
                 >
-                  🎉 Xác nhận trả đồ cho KH
+                  {paying ? 'Đang xử lý...' : lookupOrder.tienConLai > 0
+                    ? `🎉 Thanh toán ${formatCurrency(lookupOrder.tienConLai)} & Trả đồ`
+                    : '🎉 Xác nhận trả đồ cho KH'
+                  }
                 </Button>
               ) : (
-                <Alert severity="info" sx={{ mb: 2 }}>
+                <Alert severity="info" sx={{ py: 0.5 }}>
                   Đơn hàng đang ở trạng thái <strong>{TRANG_THAI_LABELS[lookupOrder.trangThai]}</strong>. Cần giặt xong trước khi trả đồ.
                 </Alert>
               )}
@@ -1514,6 +1544,7 @@ export default function POSPage() {
               {paymentMethod === PhuongThucThanhToan.CHUYEN_KHOAN && bankInfo && createdOrder && (
                 <Box sx={{ mb: 2 }}>
                   <BankQRCode
+                    maNganHang={bankInfo.maNganHang}
                     tenNganHang={bankInfo.tenNganHang}
                     soTaiKhoan={bankInfo.soTaiKhoan}
                     chuTaiKhoan={bankInfo.chuTaiKhoan}

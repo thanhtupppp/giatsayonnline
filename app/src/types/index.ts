@@ -11,6 +11,7 @@ export interface CuaHang {
   ngayTao: Timestamp;
   maAdminChinh: string;
   thongTinThanhToan?: {
+    maNganHang: string;
     tenNganHang: string;
     soTaiKhoan: string;
     chuTaiKhoan: string;
@@ -36,6 +37,7 @@ export interface CauHinhCuaHang {
   gioDongCua: string;
   ngayNghiTrongTuan: number[];
   thongTinThanhToan?: {
+    maNganHang: string;
     tenNganHang: string;
     soTaiKhoan: string;
     chuTaiKhoan: string;

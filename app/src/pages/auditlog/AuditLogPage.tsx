@@ -7,8 +7,9 @@ import {
 import { Search, ExpandMore, ExpandLess } from '@mui/icons-material';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
+import toast from 'react-hot-toast';
 import {
-  collection, getDocs, query, where, orderBy, limit, Timestamp,
+  collection, getDocs, query, where, limit, Timestamp,
 } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -47,13 +48,25 @@ export default function AuditLogPage() {
         constraints.push(where('timestamp', '<=', Timestamp.fromDate(toDate)));
       }
 
-      constraints.push(orderBy('timestamp', 'desc'));
+      // Removed orderBy('timestamp', 'desc') to avoid missing composite index error
       constraints.push(limit(200));
 
       const q = query(collection(db, 'auditLog'), ...constraints);
       const snap = await getDocs(q);
-      setLogs(snap.docs.map((d) => ({ maLog: d.id, ...d.data() }) as AuditLog));
-    } catch { /* empty */ }
+      
+      const parsedLogs = snap.docs.map((d) => ({ maLog: d.id, ...d.data() }) as AuditLog);
+      // In-memory sort by timestamp descending
+      parsedLogs.sort((a, b) => {
+        const ta = a.timestamp?.toDate?.() || new Date(0);
+        const tb = b.timestamp?.toDate?.() || new Date(0);
+        return tb.getTime() - ta.getTime();
+      });
+      
+      setLogs(parsedLogs);
+    } catch (err: any) {
+      console.error('AuditLog Error:', err);
+      toast.error('Lỗi tải nhật ký: ' + err.message);
+    }
     setLoading(false);
   };
 
