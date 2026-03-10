@@ -41,22 +41,23 @@ export default async function handler(req: any, res: any) {
   try {
     const db = getFirestore();
     
-    // Tải dữ liệu từ 3 collection chính
-    const [donHangs, khachHangs, giaoDichs] = await Promise.all([
-      db.collection('donHang').get(),
-      db.collection('khachHang').get(),
-      db.collection('giaoDich').get()
-    ]);
-
-    const backupData = {
+    // Lấy danh sách toàn bộ các Collection có trong Database
+    const collections = await db.listCollections();
+    
+    const backupData: Record<string, any> = {
       thoiGianBackup: new Date().toISOString(),
-      tongSoDonHang: donHangs.size,
-      tongSoKhachHang: khachHangs.size,
-      tongSoGiaoDich: giaoDichs.size,
-      donHang: donHangs.docs.map((d: any) => ({id: d.id, ...d.data()})),
-      khachHang: khachHangs.docs.map((d: any) => ({id: d.id, ...d.data()})),
-      giaoDich: giaoDichs.docs.map((d: any) => ({id: d.id, ...d.data()}))
+      tongSoCollection: collections.length,
+      chiTietData: {}
     };
+
+    let totalDocs = 0;
+
+    // Duyệt qua từng Collection và tải toàn bộ Document
+    for (const collection of collections) {
+      const snapshot = await collection.get();
+      backupData.chiTietData[collection.id] = snapshot.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+      totalDocs += snapshot.size;
+    }
 
     const backupString = JSON.stringify(backupData, null, 2);
     
@@ -79,18 +80,18 @@ export default async function handler(req: any, res: any) {
     await transporter.sendMail({
       from: `"Giặt Sấy Online Backup" <${process.env.EMAIL_USER}>`,
       to: process.env.BACKUP_RECEIVER_EMAIL,
-      subject: `[Backup] Giặt Sấy Online - ${dateStr}`,
-      text: `Chào quản trị viên,\n\nHệ thống Vercel Cron đã tự động sao lưu dữ liệu thành công lúc ${new Date().toLocaleString('vi-VN')}.\n\nTổng cộng:\n- ${donHangs.size} Đơn hàng\n- ${khachHangs.size} Khách hàng\n- ${giaoDichs.size} Giao dịch.\n\nVui lòng tải file JSON đính kèm để lưu trữ.\n\nTrân trọng,\nGiặt Sấy Online System.`,
+      subject: `[Backup] Giặt Sấy Online - ${dateStr} - Toàn bộ dữ liệu`,
+      text: `Chào quản trị viên,\n\nHệ thống Vercel Cron đã tự động sao lưu dữ liệu TOÀN BỘ hệ thống thành công lúc ${new Date().toLocaleString('vi-VN')}.\n\nThống kê cơ bản:\n- Số lượng Bảng (Collections): ${collections.length}\n- Tổng Dữ liệu (Documents): ${totalDocs}\n\nVui lòng tải file JSON (Full Database Dump) đính kèm để lưu trữ.\n\nTrân trọng,\nGiặt Sấy Online System.`,
       attachments: [
         {
-          filename: `giatsay_backup_${dateStr}.json`,
+          filename: `giatsay_backup_full_${dateStr}.json`,
           content: backupString,
           contentType: 'application/json'
         }
       ]
     });
 
-    res.status(200).json({ success: true, message: `Backup array ${donHangs.size} orders, emailed to ${process.env.BACKUP_RECEIVER_EMAIL}.` });
+    res.status(200).json({ success: true, message: `Backup full db (${collections.length} collections, ${totalDocs} docs), emailed to ${process.env.BACKUP_RECEIVER_EMAIL}.` });
   } catch (error: any) {
     console.error('Backup error:', error);
     res.status(500).json({ success: false, error: error.message || 'Lỗi không xác định.' });
