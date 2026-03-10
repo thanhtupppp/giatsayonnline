@@ -1,16 +1,17 @@
-import * as admin from 'firebase-admin';
+import { getApps, initializeApp, cert } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 import nodemailer from 'nodemailer';
 
-// Initialize Firebase Admin (Only once)
-if (!admin.apps.length) {
+// Khởi tạo Firebase Admin (Chỉ một lần trên môi trường Serverless)
+if (!getApps().length) {
   try {
     const privateKey = process.env.FIREBASE_PRIVATE_KEY
       ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n')
       : undefined;
 
     if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && privateKey) {
-      admin.initializeApp({
-        credential: admin.credential.cert({
+      initializeApp({
+        credential: cert({
           projectId: process.env.FIREBASE_PROJECT_ID,
           clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
           privateKey,
@@ -19,7 +20,7 @@ if (!admin.apps.length) {
       console.log('Firebase Admin initialized with Environment Variables.');
     } else {
       // Fallback for local testing or if deployed securely within GCP (Vercel isn't GCP, so env vars are needed)
-      admin.initializeApp();
+      initializeApp();
       console.log('Firebase Admin initialized with default application credentials.');
     }
   } catch (error) {
@@ -38,7 +39,7 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const db = admin.firestore();
+    const db = getFirestore();
     
     // Tải dữ liệu từ 3 collection chính
     const [donHangs, khachHangs, giaoDichs] = await Promise.all([
@@ -52,9 +53,9 @@ export default async function handler(req: any, res: any) {
       tongSoDonHang: donHangs.size,
       tongSoKhachHang: khachHangs.size,
       tongSoGiaoDich: giaoDichs.size,
-      donHang: donHangs.docs.map(d => ({id: d.id, ...d.data()})),
-      khachHang: khachHangs.docs.map(d => ({id: d.id, ...d.data()})),
-      giaoDich: giaoDichs.docs.map(d => ({id: d.id, ...d.data()}))
+      donHang: donHangs.docs.map((d: any) => ({id: d.id, ...d.data()})),
+      khachHang: khachHangs.docs.map((d: any) => ({id: d.id, ...d.data()})),
+      giaoDich: giaoDichs.docs.map((d: any) => ({id: d.id, ...d.data()}))
     };
 
     const backupString = JSON.stringify(backupData, null, 2);
