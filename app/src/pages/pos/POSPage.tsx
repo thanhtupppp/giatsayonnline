@@ -263,14 +263,6 @@ export default function POSPage() {
     setPendingReturnOrders(returnOrders);
   };
 
-  // UI scroll helper for POS machines where swiping is difficult
-  const handleScroll = (e: React.MouseEvent, direction: 'left' | 'right') => {
-    const container = (e.currentTarget.closest('.scroll-wrapper') as HTMLElement)?.querySelector('.order-scroll-container');
-    if (container) {
-      container.scrollBy({ left: direction === 'left' ? -250 : 250, behavior: 'smooth' });
-    }
-  };
-
   // Helper: switch tab and auto-focus the relevant input
   const switchTab = useCallback((tab: number) => {
     setPosTab(tab);
@@ -1510,61 +1502,43 @@ export default function POSPage() {
 
             {/* Quick list of orders needing "Giặt xong" (if no order is currently looked up) */}
             {!lookupOrder && pendingWashOrders.length > 0 && (
-              <Card sx={{ mb: 2 }} className="scroll-wrapper">
+              <Card sx={{ mb: 2 }}>
                 <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                    <Typography variant="subtitle2" color="primary" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      ⏳ Đơn đang xử lý ({pendingWashCount})
-                    </Typography>
-                    {pendingWashOrders.length > 2 && (
-                      <Box>
-                        <IconButton size="small" onClick={(e) => handleScroll(e, 'left')} sx={{ border: '1px solid', borderColor: 'divider', mr: 1, bgcolor: 'background.paper', boxShadow: 1 }}><ChevronLeft /></IconButton>
-                        <IconButton size="small" onClick={(e) => handleScroll(e, 'right')} sx={{ border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', boxShadow: 1 }}><ChevronRight /></IconButton>
-                      </Box>
-                    )}
-                  </Box>
-                  <Box className="order-scroll-container" sx={{
-                    overflowX: 'auto',
-                    overflowY: 'hidden',
-                    whiteSpace: 'nowrap',
-                    mx: -1.5, // Negate card padding to let scroll edge hit the bounds
-                    px: 1.5,
-                    pb: 1,
-                    scrollBehavior: 'smooth',
-                    // Hide scrollbar for a cleaner look
-                    scrollbarWidth: 'none',
-                    msOverflowStyle: 'none',
-                    '&::-webkit-scrollbar': { display: 'none' }
+                  <Typography variant="subtitle2" color="primary" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    ⏳ Đơn đang xử lý ({pendingWashCount})
+                  </Typography>
+                  <Box sx={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+                    gap: 1.5,
                   }}>
-                    <List dense disablePadding sx={{ display: 'flex', gap: 1 }}>
-                      {pendingWashOrders.map(order => {
-                        const custName = allCustomers.find(c => c.maKhachHang === order.maKhachHang)?.hoTen || order.maKhachHang;
-                        return (
-                          <ListItemButton key={order.maDonHang} onClick={() => setLookupOrder(order)} sx={{ 
-                            p: 1.5, borderRadius: 2, border: '1px solid', borderColor: 'divider', 
-                            minWidth: 220, maxWidth: 280, display: 'block', whiteSpace: 'normal',
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.05)', bgcolor: 'background.paper'
-                          }}>
-                            <ListItemText
-                              primaryTypographyProps={{ component: 'div' }}
-                              secondaryTypographyProps={{ component: 'div' }}
-                              primary={
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                                  <Typography variant="subtitle2" fontWeight={700}>{order.maDonHang}</Typography>
-                                  <Chip label={TRANG_THAI_LABELS[order.trangThai]} size="small" sx={{ bgcolor: TRANG_THAI_COLORS[order.trangThai], color: 'white', fontWeight: 600, fontSize: 10, height: 20 }} />
-                                </Box>
-                              }
-                              secondary={
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Typography variant="body2" color="text.secondary" noWrap sx={{ maxWidth: '60%' }}>👤 {custName}</Typography>
-                                  <Typography variant="body2" fontWeight={700} color="primary">{formatCurrency(order.tongTien)}</Typography>
-                                </Box>
-                              }
-                            />
-                          </ListItemButton>
-                        );
-                      })}
-                    </List>
+                    {pendingWashOrders.map(order => {
+                      const custName = allCustomers.find(c => c.maKhachHang === order.maKhachHang)?.hoTen || order.maKhachHang;
+                      return (
+                        <ListItemButton key={order.maDonHang} onClick={() => setLookupOrder(order)} sx={{ 
+                          p: 1.5, borderRadius: 2, border: '1px solid', borderColor: 'divider', 
+                          display: 'block', whiteSpace: 'normal',
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.05)', bgcolor: 'background.paper'
+                        }}>
+                          <ListItemText
+                            primaryTypographyProps={{ component: 'div' }}
+                            secondaryTypographyProps={{ component: 'div' }}
+                            primary={
+                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                                <Typography variant="subtitle2" fontWeight={700}>{order.maDonHang}</Typography>
+                                <Chip label={TRANG_THAI_LABELS[order.trangThai]} size="small" sx={{ bgcolor: TRANG_THAI_COLORS[order.trangThai], color: 'white', fontWeight: 600, fontSize: 10, height: 20 }} />
+                              </Box>
+                            }
+                            secondary={
+                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <Typography variant="body2" color="text.secondary" noWrap sx={{ maxWidth: '60%' }}>👤 {custName}</Typography>
+                                <Typography variant="body2" fontWeight={700} color="primary">{formatCurrency(order.tongTien)}</Typography>
+                              </Box>
+                            }
+                          />
+                        </ListItemButton>
+                      );
+                    })}
                   </Box>
                 </CardContent>
               </Card>
@@ -1659,64 +1633,47 @@ export default function POSPage() {
 
             {/* Quick list of orders needing "Trả đồ" (if no order is currently looked up) */}
             {!lookupOrder && pendingReturnOrders.length > 0 && (
-              <Card sx={{ mb: 2 }} className="scroll-wrapper">
+              <Card sx={{ mb: 2 }}>
                 <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                    <Typography variant="subtitle2" color="success.main" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      ✅ Đơn đã xong, chờ trả khách ({pendingReturnCount})
-                    </Typography>
-                    {pendingReturnOrders.length > 2 && (
-                      <Box>
-                        <IconButton size="small" onClick={(e) => handleScroll(e, 'left')} sx={{ border: '1px solid', borderColor: 'divider', mr: 1, bgcolor: 'background.paper', boxShadow: 1 }}><ChevronLeft /></IconButton>
-                        <IconButton size="small" onClick={(e) => handleScroll(e, 'right')} sx={{ border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', boxShadow: 1 }}><ChevronRight /></IconButton>
-                      </Box>
-                    )}
-                  </Box>
-                  <Box className="order-scroll-container" sx={{
-                    overflowX: 'auto',
-                    overflowY: 'hidden',
-                    whiteSpace: 'nowrap',
-                    mx: -1.5,
-                    px: 1.5,
-                    pb: 1,
-                    scrollBehavior: 'smooth',
-                    scrollbarWidth: 'none',
-                    msOverflowStyle: 'none',
-                    '&::-webkit-scrollbar': { display: 'none' }
+                  <Typography variant="subtitle2" color="success.main" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    ✅ Đơn đã xong, chờ trả khách ({pendingReturnCount})
+                  </Typography>
+                  <Box sx={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+                    gap: 1.5,
                   }}>
-                    <List dense disablePadding sx={{ display: 'flex', gap: 1 }}>
-                      {pendingReturnOrders.map(order => {
-                        const custName = allCustomers.find(c => c.maKhachHang === order.maKhachHang)?.hoTen || order.maKhachHang;
-                        return (
-                          <ListItemButton key={order.maDonHang} onClick={() => setLookupOrder(order)} sx={{ 
-                            p: 1.5, borderRadius: 2, border: '1px solid', borderColor: 'divider', 
-                            minWidth: 220, maxWidth: 280, display: 'block', whiteSpace: 'normal',
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.05)', bgcolor: 'background.paper'
-                          }}>
-                            <ListItemText
-                              primaryTypographyProps={{ component: 'div' }}
-                              secondaryTypographyProps={{ component: 'div' }}
-                              primary={
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                                  <Typography variant="subtitle2" fontWeight={700}>{order.maDonHang}</Typography>
-                                  {order.tienConLai > 0 ? (
-                                    <Chip label={`Thiếu ${formatCurrency(order.tienConLai)}`} size="small" color="error" variant="outlined" sx={{ fontWeight: 600, fontSize: 10, height: 20 }} />
-                                  ) : (
-                                    <Chip label="Đã TT" size="small" color="success" variant="outlined" sx={{ fontWeight: 600, fontSize: 10, height: 20 }} />
-                                  )}
-                                </Box>
-                              }
-                              secondary={
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Typography variant="body2" color="text.secondary" noWrap sx={{ maxWidth: '60%' }}>👤 {custName}</Typography>
-                                  <Typography variant="body2" fontWeight={700} color="primary">{formatCurrency(order.tongTien)}</Typography>
-                                </Box>
-                              }
-                            />
-                          </ListItemButton>
-                        );
-                      })}
-                    </List>
+                    {pendingReturnOrders.map(order => {
+                      const custName = allCustomers.find(c => c.maKhachHang === order.maKhachHang)?.hoTen || order.maKhachHang;
+                      return (
+                        <ListItemButton key={order.maDonHang} onClick={() => setLookupOrder(order)} sx={{ 
+                          p: 1.5, borderRadius: 2, border: '1px solid', borderColor: 'divider', 
+                          display: 'block', whiteSpace: 'normal',
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.05)', bgcolor: 'background.paper'
+                        }}>
+                          <ListItemText
+                            primaryTypographyProps={{ component: 'div' }}
+                            secondaryTypographyProps={{ component: 'div' }}
+                            primary={
+                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                                <Typography variant="subtitle2" fontWeight={700}>{order.maDonHang}</Typography>
+                                {order.tienConLai > 0 ? (
+                                  <Chip label={`Thiếu ${formatCurrency(order.tienConLai)}`} size="small" color="error" variant="outlined" sx={{ fontWeight: 600, fontSize: 10, height: 20 }} />
+                                ) : (
+                                  <Chip label="Đã TT" size="small" color="success" variant="outlined" sx={{ fontWeight: 600, fontSize: 10, height: 20 }} />
+                                )}
+                              </Box>
+                            }
+                            secondary={
+                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <Typography variant="body2" color="text.secondary" noWrap sx={{ maxWidth: '60%' }}>👤 {custName}</Typography>
+                                <Typography variant="body2" fontWeight={700} color="primary">{formatCurrency(order.tongTien)}</Typography>
+                              </Box>
+                            }
+                          />
+                        </ListItemButton>
+                      );
+                    })}
                   </Box>
                 </CardContent>
               </Card>
