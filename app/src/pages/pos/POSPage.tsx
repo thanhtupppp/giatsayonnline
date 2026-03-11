@@ -81,9 +81,11 @@ export default function POSPage() {
   // TC 21: Today's stats
   const [todayStats, setTodayStats] = useState({ count: 0, revenue: 0 });
 
-  // Badge counts: pending wash & pending return
+  // Badge counts & lists: pending wash & pending return
   const [pendingWashCount, setPendingWashCount] = useState(0);
+  const [pendingWashOrders, setPendingWashOrders] = useState<DonHang[]>([]);
   const [pendingReturnCount, setPendingReturnCount] = useState(0);
+  const [pendingReturnOrders, setPendingReturnOrders] = useState<DonHang[]>([]);
 
   // TC 25: Cancel confirmation
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
@@ -246,13 +248,18 @@ export default function POSPage() {
       revenue: todayOrders.reduce((sum, o) => sum + o.tienDaTra, 0),
     });
 
-    // Badge counts
+    // Badge counts and lists
     const washStatuses = [
       TrangThaiDonHang.CHO_XU_LY, TrangThaiDonHang.CHO_CAN_KY,
       TrangThaiDonHang.DANG_GIAT, TrangThaiDonHang.DANG_SAY, TrangThaiDonHang.DANG_UI,
     ];
-    setPendingWashCount(orders.filter((o) => washStatuses.includes(o.trangThai)).length);
-    setPendingReturnCount(orders.filter((o) => o.trangThai === TrangThaiDonHang.HOAN_THANH).length);
+    const washOrders = orders.filter((o) => washStatuses.includes(o.trangThai));
+    setPendingWashCount(washOrders.length);
+    setPendingWashOrders(washOrders);
+
+    const returnOrders = orders.filter((o) => o.trangThai === TrangThaiDonHang.HOAN_THANH);
+    setPendingReturnCount(returnOrders.length);
+    setPendingReturnOrders(returnOrders);
   };
 
   // Helper: switch tab and auto-focus the relevant input
@@ -1491,6 +1498,43 @@ export default function POSPage() {
           {/* Scrollable content area */}
           <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
             {renderOrderLookup()}
+
+            {/* Quick list of orders needing "Giặt xong" (if no order is currently looked up) */}
+            {!lookupOrder && pendingWashOrders.length > 0 && (
+              <Card sx={{ mb: 2 }}>
+                <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+                  <Typography variant="subtitle2" color="primary" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    ⏳ Đơn đang xử lý ({pendingWashCount})
+                  </Typography>
+                  <List dense disablePadding>
+                    {pendingWashOrders.map(order => {
+                      const custName = allCustomers.find(c => c.maKhachHang === order.maKhachHang)?.hoTen || order.maKhachHang;
+                      return (
+                        <ListItemButton key={order.maDonHang} onClick={() => setLookupOrder(order)} sx={{ py: 1, px: 1, borderRadius: 1, mb: 0.5, border: '1px solid', borderColor: 'divider' }}>
+                          <ListItemText
+                            primaryTypographyProps={{ component: 'div' }}
+                            secondaryTypographyProps={{ component: 'div' }}
+                            primary={
+                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <Typography variant="body2" fontWeight={700}>{order.maDonHang}</Typography>
+                                <Chip label={TRANG_THAI_LABELS[order.trangThai]} size="small" sx={{ bgcolor: TRANG_THAI_COLORS[order.trangThai], color: 'white', fontWeight: 600, fontSize: 10, height: 20 }} />
+                              </Box>
+                            }
+                            secondary={
+                              <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
+                                <Typography variant="caption" color="text.secondary">👤 {custName}</Typography>
+                                <Typography variant="caption" fontWeight={600} color="primary">{formatCurrency(order.tongTien)}</Typography>
+                              </Box>
+                            }
+                          />
+                        </ListItemButton>
+                      );
+                    })}
+                  </List>
+                </CardContent>
+              </Card>
+            )}
+
             {renderOrderInfo()}
             {/* Mode 2: Add services for orders with empty danhSachDichVu */}
             {lookupOrder && lookupOrder.danhSachDichVu.length === 0 && lookupOrder.trangThai !== TrangThaiDonHang.HOAN_THANH && lookupOrder.trangThai !== TrangThaiDonHang.DA_GIAO && (
@@ -1577,6 +1621,47 @@ export default function POSPage() {
           {/* Scrollable content area — order info + payment details */}
           <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
             {renderOrderLookup()}
+
+            {/* Quick list of orders needing "Trả đồ" (if no order is currently looked up) */}
+            {!lookupOrder && pendingReturnOrders.length > 0 && (
+              <Card sx={{ mb: 2 }}>
+                <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+                  <Typography variant="subtitle2" color="success.main" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    ✅ Đơn đã xong, chờ trả khách ({pendingReturnCount})
+                  </Typography>
+                  <List dense disablePadding>
+                    {pendingReturnOrders.map(order => {
+                      const custName = allCustomers.find(c => c.maKhachHang === order.maKhachHang)?.hoTen || order.maKhachHang;
+                      return (
+                        <ListItemButton key={order.maDonHang} onClick={() => setLookupOrder(order)} sx={{ py: 1, px: 1, borderRadius: 1, mb: 0.5, border: '1px solid', borderColor: 'divider' }}>
+                          <ListItemText
+                            primaryTypographyProps={{ component: 'div' }}
+                            secondaryTypographyProps={{ component: 'div' }}
+                            primary={
+                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <Typography variant="body2" fontWeight={700}>{order.maDonHang}</Typography>
+                                {order.tienConLai > 0 ? (
+                                  <Chip label={`Thiếu ${formatCurrency(order.tienConLai)}`} size="small" color="error" variant="outlined" sx={{ fontWeight: 600, fontSize: 10, height: 20 }} />
+                                ) : (
+                                  <Chip label="Đã TT" size="small" color="success" variant="outlined" sx={{ fontWeight: 600, fontSize: 10, height: 20 }} />
+                                )}
+                              </Box>
+                            }
+                            secondary={
+                              <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
+                                <Typography variant="caption" color="text.secondary">👤 {custName}</Typography>
+                                <Typography variant="caption" fontWeight={600} color="primary">{formatCurrency(order.tongTien)}</Typography>
+                              </Box>
+                            }
+                          />
+                        </ListItemButton>
+                      );
+                    })}
+                  </List>
+                </CardContent>
+              </Card>
+            )}
+
             {renderOrderInfo()}
             {lookupOrder && (
               <Box>
