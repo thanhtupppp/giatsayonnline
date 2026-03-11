@@ -1517,9 +1517,13 @@ export default function POSPage() {
                       ⏳ Đơn đang xử lý ({pendingWashCount})
                     </Typography>
                     {pendingWashOrders.length > 12 && (
-                      <Box>
-                        <IconButton size="small" onClick={(e) => handleScroll(e, 'left')} sx={{ border: '1px solid', borderColor: 'divider', mr: 1, bgcolor: 'background.paper', boxShadow: 1 }}><ChevronLeft /></IconButton>
-                        <IconButton size="small" onClick={(e) => handleScroll(e, 'right')} sx={{ border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', boxShadow: 1 }}><ChevronRight /></IconButton>
+                      <Box sx={{ display: 'flex', gap: 2 }}>
+                        <IconButton onClick={(e) => handleScroll(e, 'left')} sx={{ border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', boxShadow: 1, p: 1 }}>
+                          <ChevronLeft fontSize="large" />
+                        </IconButton>
+                        <IconButton onClick={(e) => handleScroll(e, 'right')} sx={{ border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', boxShadow: 1, p: 1 }}>
+                          <ChevronRight fontSize="large" />
+                        </IconButton>
                       </Box>
                     )}
                   </Box>
@@ -1674,9 +1678,13 @@ export default function POSPage() {
                       ✅ Đơn đã xong, chờ trả khách ({pendingReturnCount})
                     </Typography>
                     {pendingReturnOrders.length > 12 && (
-                      <Box>
-                        <IconButton size="small" onClick={(e) => handleScroll(e, 'left')} sx={{ border: '1px solid', borderColor: 'divider', mr: 1, bgcolor: 'background.paper', boxShadow: 1 }}><ChevronLeft /></IconButton>
-                        <IconButton size="small" onClick={(e) => handleScroll(e, 'right')} sx={{ border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', boxShadow: 1 }}><ChevronRight /></IconButton>
+                      <Box sx={{ display: 'flex', gap: 2 }}>
+                        <IconButton onClick={(e) => handleScroll(e, 'left')} sx={{ border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', boxShadow: 1, p: 1 }}>
+                          <ChevronLeft fontSize="large" />
+                        </IconButton>
+                        <IconButton onClick={(e) => handleScroll(e, 'right')} sx={{ border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', boxShadow: 1, p: 1 }}>
+                          <ChevronRight fontSize="large" />
+                        </IconButton>
                       </Box>
                     )}
                   </Box>
