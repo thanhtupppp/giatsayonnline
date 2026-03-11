@@ -4,7 +4,7 @@ import {
   TableHead, TableRow, Paper, Chip, Select, MenuItem,
   FormControl, InputLabel, IconButton, CircularProgress, Button,
   Dialog, DialogTitle, DialogContent, DialogActions, Stepper, Step, StepLabel,
-  TextField, InputAdornment
+  TextField, InputAdornment, TableSortLabel
 } from '@mui/material';
 import { Visibility, Search, Print, Warning, NavigateNext, NavigateBefore, Delete } from '@mui/icons-material';
 import toast from 'react-hot-toast';
@@ -32,6 +32,10 @@ export default function DonHangPage() {
   const [filterDateTo, setFilterDateTo] = useState('');
   const [detailOpen, setDetailOpen] = useState(false);
   const [selected, setSelected] = useState<DonHang | null>(null);
+
+  // Sorting state
+  const [orderDirection, setOrderDirection] = useState<'asc' | 'desc'>('desc');
+  const [orderBy, setOrderBy] = useState<string>('ngayTao');
 
   // Delete control
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -128,6 +132,49 @@ export default function DonHangPage() {
       if (orderDate > to) return false;
     }
     return true;
+  });
+
+  const handleRequestSort = (property: string) => {
+    const isAsc = orderBy === property && orderDirection === 'asc';
+    setOrderDirection(isAsc ? 'desc' : 'asc');
+    setOrderBy(property);
+  };
+
+  const sortedOrders = [...filteredOrders].sort((a, b) => {
+    let result = 0;
+    switch (orderBy) {
+      case 'maDonHang':
+        result = a.maDonHang.localeCompare(b.maDonHang);
+        break;
+      case 'khachHang':
+        const nameA = customerMap[a.maKhachHang]?.hoTen || '';
+        const nameB = customerMap[b.maKhachHang]?.hoTen || '';
+        result = nameA.localeCompare(nameB, 'vi');
+        break;
+      case 'ngayHenTra':
+        const timeA = a.ngayHenTra?.toMillis?.() || 0;
+        const timeB = b.ngayHenTra?.toMillis?.() || 0;
+        result = timeA - timeB;
+        break;
+      case 'tongTien':
+        result = a.tongTien - b.tongTien;
+        break;
+      case 'tienDaTra':
+        result = a.tienDaTra - b.tienDaTra;
+        break;
+      case 'maNhanVien':
+        const empA = employeeMap[a.maNhanVien] || '';
+        const empB = employeeMap[b.maNhanVien] || '';
+        result = empA.localeCompare(empB, 'vi');
+        break;
+      case 'ngayTao':
+      default:
+        const tA = a.ngayTao?.toMillis?.() || 0;
+        const tB = b.ngayTao?.toMillis?.() || 0;
+        result = tA - tB;
+        break;
+    }
+    return orderDirection === 'asc' ? result : -result;
   });
 
   const handleUpdateStatus = async (id: string, newStatus: TrangThaiDonHang, isAdminOverride = false) => {
@@ -296,20 +343,32 @@ export default function DonHangPage() {
           <Table sx={{ minWidth: 600 }}>
             <TableHead>
               <TableRow sx={{ bgcolor: 'grey.50' }}>
-                <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Mã đơn</TableCell>
-                <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Khách hàng</TableCell>
-                <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap', display: { xs: 'none', md: 'table-cell' } }}>Hẹn trả</TableCell>
-                <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap', display: { xs: 'none', sm: 'table-cell' } }}>Tổng tiền</TableCell>
-                <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap', display: { xs: 'none', sm: 'table-cell' } }}>Đã trả</TableCell>
-                <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap', display: { xs: 'none', md: 'table-cell' } }}>Nhân viên</TableCell>
+                <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
+                  <TableSortLabel active={orderBy === 'maDonHang'} direction={orderBy === 'maDonHang' ? orderDirection : 'asc'} onClick={() => handleRequestSort('maDonHang')}>Mã đơn</TableSortLabel>
+                </TableCell>
+                <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
+                  <TableSortLabel active={orderBy === 'khachHang'} direction={orderBy === 'khachHang' ? orderDirection : 'asc'} onClick={() => handleRequestSort('khachHang')}>Khách hàng</TableSortLabel>
+                </TableCell>
+                <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap', display: { xs: 'none', md: 'table-cell' } }}>
+                  <TableSortLabel active={orderBy === 'ngayHenTra'} direction={orderBy === 'ngayHenTra' ? orderDirection : 'asc'} onClick={() => handleRequestSort('ngayHenTra')}>Hẹn trả</TableSortLabel>
+                </TableCell>
+                <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap', display: { xs: 'none', sm: 'table-cell' } }}>
+                  <TableSortLabel active={orderBy === 'tongTien'} direction={orderBy === 'tongTien' ? orderDirection : 'asc'} onClick={() => handleRequestSort('tongTien')}>Tổng tiền</TableSortLabel>
+                </TableCell>
+                <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap', display: { xs: 'none', sm: 'table-cell' } }}>
+                  <TableSortLabel active={orderBy === 'tienDaTra'} direction={orderBy === 'tienDaTra' ? orderDirection : 'asc'} onClick={() => handleRequestSort('tienDaTra')}>Đã trả</TableSortLabel>
+                </TableCell>
+                <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap', display: { xs: 'none', md: 'table-cell' } }}>
+                  <TableSortLabel active={orderBy === 'maNhanVien'} direction={orderBy === 'maNhanVien' ? orderDirection : 'asc'} onClick={() => handleRequestSort('maNhanVien')}>Nhân viên</TableSortLabel>
+                </TableCell>
                 <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Trạng thái</TableCell>
                 <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Thao tác</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {filteredOrders.length === 0 ? (
+              {sortedOrders.length === 0 ? (
                 <TableRow><TableCell colSpan={8} align="center" sx={{ py: 4 }}>Chưa có đơn hàng nào</TableCell></TableRow>
-              ) : filteredOrders.map((dh) => (
+              ) : sortedOrders.map((dh) => (
                 <TableRow key={dh.maDonHang} hover>
                   <TableCell sx={{ fontWeight: 600, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
                     {dh.maDonHang}
