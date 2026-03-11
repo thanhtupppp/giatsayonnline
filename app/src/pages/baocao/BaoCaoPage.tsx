@@ -34,7 +34,7 @@ import { formatCurrency, TRANG_THAI_LABELS, TRANG_THAI_COLORS } from '../../util
 
 // ===== TYPES =====
 type TimeRange = 'today' | 'week' | 'month' | 'year' | 'custom';
-type CardKey = 'revenue' | 'total' | 'completed' | 'daGiao' | 'chuaGiat' | 'dangGiat' | 'chuaTra' | 'daHuy' | 'tienMat' | 'chuyenKhoan' | null;
+type CardKey = 'revenue' | 'actualRevenue' | 'total' | 'completed' | 'daGiao' | 'chuaGiat' | 'dangGiat' | 'chuaTra' | 'daHuy' | 'tienMat' | 'chuyenKhoan' | null;
 
 // ===== HELPERS =====
 const PIE_COLORS = ['#5C6BC0', '#42A5F5', '#26C6DA', '#66BB6A', '#FFA726', '#EF5350', '#AB47BC', '#78909C'];
@@ -177,6 +177,13 @@ export default function BaoCaoPage() {
     return m;
   }, [allUsers]);
 
+  // Customer map for name lookups
+  const customerMap = useMemo(() => {
+    const m = new Map<string, string>();
+    allKhachHangs.forEach(k => m.set(k.maKhachHang, k.hoTen));
+    return m;
+  }, [allKhachHangs]);
+
   // ===== STATISTICS =====
   const stats = useMemo(() => {
     const total = filteredDonHangs.length;
@@ -195,6 +202,7 @@ export default function BaoCaoPage() {
     );
     const daHuy = filteredDonHangs.filter(d => d.trangThai === TrangThaiDonHang.DA_HUY);
     const revenue = completed.reduce((sum, d) => sum + d.tongTien, 0);
+    const actualRevenue = filteredDonHangs.reduce((sum, d) => sum + d.tienDaTra, 0);
 
     // Overdue orders: ngayHenTra < now && not DA_GIAO && not DA_HUY
     const now = new Date();
@@ -214,7 +222,7 @@ export default function BaoCaoPage() {
     return {
       total, completed: completed.length, chuaGiat: chuaGiat.length,
       chuaTra: chuaTra.length, daGiao: daGiao.length, dangGiat: dangGiat.length,
-      daHuy: daHuy.length, revenue, overdue,
+      daHuy: daHuy.length, revenue, actualRevenue, overdue,
       tienMatCount: tienMat.length, chuyenKhoanCount: chuyenKhoan.length,
       tienMatTotal, chuyenKhoanTotal,
     };
@@ -400,10 +408,11 @@ export default function BaoCaoPage() {
         <Box id="report-content">
           {/* ROW 1: Main stats */}
           <Grid container spacing={2} sx={{ mb: 3 }}>
-            <Grid size={{ xs: 6, sm: 4, md: 3 }}><StatCard title="Tổng Doanh Thu" value={formatCurrency(stats.revenue)} icon={<TrendingUp />} color="#1565C0" active={selectedCard === 'revenue'} onClick={() => toggleCard('revenue')} /></Grid>
-            <Grid size={{ xs: 6, sm: 4, md: 3 }}><StatCard title="Tổng Đơn Hàng" value={stats.total} icon={<Receipt />} color="#2E7D32" active={selectedCard === 'total'} onClick={() => toggleCard('total')} /></Grid>
-            <Grid size={{ xs: 6, sm: 4, md: 3 }}><StatCard title="Hoàn Thành" value={stats.completed} icon={<CheckCircle />} color="#4CAF50" subtitle={`${stats.total > 0 ? ((stats.completed / stats.total) * 100).toFixed(0) : 0}% đơn`} active={selectedCard === 'completed'} onClick={() => toggleCard('completed')} /></Grid>
-            <Grid size={{ xs: 6, sm: 4, md: 3 }}><StatCard title="Đã Giao Khách" value={stats.daGiao} icon={<LocalShipping />} color="#00897B" active={selectedCard === 'daGiao'} onClick={() => toggleCard('daGiao')} /></Grid>
+            <Grid size={{ xs: 6, sm: 4, md: 2.4 }}><StatCard title="Tổng Doanh Thu" value={formatCurrency(stats.revenue)} icon={<TrendingUp />} color="#1565C0" subtitle="Tổng giá trị đơn" active={selectedCard === 'revenue'} onClick={() => toggleCard('revenue')} /></Grid>
+            <Grid size={{ xs: 6, sm: 4, md: 2.4 }}><StatCard title="Doanh Thu Thực" value={formatCurrency(stats.actualRevenue)} icon={<AccountBalanceWallet />} color="#00897B" subtitle="Đã thu từ KH" active={selectedCard === 'actualRevenue'} onClick={() => toggleCard('actualRevenue')} /></Grid>
+            <Grid size={{ xs: 6, sm: 4, md: 2.4 }}><StatCard title="Tổng Đơn Hàng" value={stats.total} icon={<Receipt />} color="#2E7D32" active={selectedCard === 'total'} onClick={() => toggleCard('total')} /></Grid>
+            <Grid size={{ xs: 6, sm: 4, md: 2.4 }}><StatCard title="Hoàn Thành" value={stats.completed} icon={<CheckCircle />} color="#4CAF50" subtitle={`${stats.total > 0 ? ((stats.completed / stats.total) * 100).toFixed(0) : 0}% đơn`} active={selectedCard === 'completed'} onClick={() => toggleCard('completed')} /></Grid>
+            <Grid size={{ xs: 6, sm: 4, md: 2.4 }}><StatCard title="Đã Giao Khách" value={stats.daGiao} icon={<LocalShipping />} color="#7B1FA2" active={selectedCard === 'daGiao'} onClick={() => toggleCard('daGiao')} /></Grid>
           </Grid>
 
           {/* ROW 2: Order status detail */}
@@ -436,6 +445,7 @@ export default function BaoCaoPage() {
               // Determine title + data based on selected card
               const cardConfigs: Record<Exclude<CardKey, null>, { title: string; type: 'order' | 'transaction'; filterOrders?: (d: DonHang) => boolean; filterGD?: (g: GiaoDich) => boolean }> = {
                 revenue: { title: '💰 Đơn hàng có doanh thu (Hoàn thành + Đã giao)', type: 'order', filterOrders: d => d.trangThai === TrangThaiDonHang.HOAN_THANH || d.trangThai === TrangThaiDonHang.DA_GIAO },
+                actualRevenue: { title: '💵 Doanh thu thực (đã thu từ khách)', type: 'order', filterOrders: d => d.tienDaTra > 0 },
                 total: { title: '📋 Tất cả đơn hàng', type: 'order', filterOrders: () => true },
                 completed: { title: '✅ Đơn hoàn thành + Đã giao', type: 'order', filterOrders: d => d.trangThai === TrangThaiDonHang.HOAN_THANH || d.trangThai === TrangThaiDonHang.DA_GIAO },
                 daGiao: { title: '🚚 Đơn đã giao khách', type: 'order', filterOrders: d => d.trangThai === TrangThaiDonHang.DA_GIAO },
@@ -465,20 +475,23 @@ export default function BaoCaoPage() {
                           <TableHead>
                             <TableRow sx={{ '& th': { bgcolor: 'grey.100', fontWeight: 700 } }}>
                               <TableCell>Mã ĐH</TableCell>
+                              <TableCell>Khách hàng</TableCell>
                               <TableCell>Ngày tạo</TableCell>
                               <TableCell>Trạng thái</TableCell>
                               <TableCell>Nhân viên</TableCell>
                               <TableCell>Hẹn trả</TableCell>
                               <TableCell align="right">Tổng tiền</TableCell>
+                              <TableCell align="right">Đã trả</TableCell>
                               <TableCell align="right">Còn lại</TableCell>
                             </TableRow>
                           </TableHead>
                           <TableBody>
                             {orderList.length === 0 ? (
-                              <TableRow><TableCell colSpan={7} align="center" sx={{ py: 4, color: 'text.secondary' }}>Không có đơn hàng nào</TableCell></TableRow>
+                              <TableRow><TableCell colSpan={9} align="center" sx={{ py: 4, color: 'text.secondary' }}>Không có đơn hàng nào</TableCell></TableRow>
                             ) : orderList.map(d => (
                               <TableRow key={d.maDonHang} hover>
                                 <TableCell sx={{ fontWeight: 600 }}>{d.maDonHang}</TableCell>
+                                <TableCell>{customerMap.get(d.maKhachHang) || '—'}</TableCell>
                                 <TableCell>{d.ngayTao?.toDate ? format(d.ngayTao.toDate(), 'dd/MM HH:mm') : '—'}</TableCell>
                                 <TableCell>
                                   <Chip label={TRANG_THAI_LABELS[d.trangThai]} size="small"
@@ -488,6 +501,7 @@ export default function BaoCaoPage() {
                                 <TableCell>{userMap.get(d.maNhanVien) || d.maNhanVien}</TableCell>
                                 <TableCell>{d.ngayHenTra?.toDate ? format(d.ngayHenTra.toDate(), 'dd/MM HH:mm') : '—'}</TableCell>
                                 <TableCell align="right" sx={{ fontWeight: 600 }}>{formatCurrency(d.tongTien)}</TableCell>
+                                <TableCell align="right" sx={{ fontWeight: 600 }}>{formatCurrency(d.tienDaTra)}</TableCell>
                                 <TableCell align="right" sx={{ color: d.tienConLai > 0 ? 'error.main' : 'success.main', fontWeight: 600 }}>{formatCurrency(d.tienConLai)}</TableCell>
                               </TableRow>
                             ))}
@@ -550,6 +564,7 @@ export default function BaoCaoPage() {
                     <TableHead>
                       <TableRow>
                         <TableCell sx={{ fontWeight: 700 }}>Mã ĐH</TableCell>
+                        <TableCell sx={{ fontWeight: 700 }}>Khách hàng</TableCell>
                         <TableCell sx={{ fontWeight: 700 }}>Trạng thái</TableCell>
                         <TableCell sx={{ fontWeight: 700 }}>Hẹn trả</TableCell>
                         <TableCell align="right" sx={{ fontWeight: 700 }}>Tổng tiền</TableCell>
@@ -559,6 +574,7 @@ export default function BaoCaoPage() {
                       {stats.overdue.slice(0, 10).map(d => (
                         <TableRow key={d.maDonHang}>
                           <TableCell sx={{ fontWeight: 600 }}>{d.maDonHang}</TableCell>
+                          <TableCell>{customerMap.get(d.maKhachHang) || '—'}</TableCell>
                           <TableCell>
                             <Chip label={TRANG_THAI_LABELS[d.trangThai]} size="small"
                               sx={{ bgcolor: TRANG_THAI_COLORS[d.trangThai], color: '#fff', fontWeight: 600, fontSize: '0.7rem' }}
