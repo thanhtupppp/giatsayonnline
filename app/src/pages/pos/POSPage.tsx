@@ -3,14 +3,14 @@ import {
   Box, Typography, Card, CardContent, Grid, Button, TextField,
   Chip, IconButton, Paper, Divider, CircularProgress,
   InputAdornment, Dialog, DialogTitle, DialogContent, DialogActions,
-  Alert, Collapse, Badge
+  Alert, Collapse, Badge, List, ListItemButton, ListItemText,
 } from '@mui/material';
 import {
   Search, Add, Remove, ShoppingCart, Delete, Payment,
   LocalLaundryService, Print, PersonAdd, Cancel, ExpandMore,
   ExpandLess, Receipt, AttachMoney, AccountBalance, CreditCard,
   PhoneAndroid, ArrowBack, CheckCircle, LocalShipping,
-  QrCodeScanner, CameraAlt,
+  QrCodeScanner, CameraAlt, SwapHoriz, Person,
 } from '@mui/icons-material';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
@@ -96,6 +96,12 @@ export default function POSPage() {
   const [lookupOrder, setLookupOrder] = useState<DonHang | null>(null);
   const [lookupCustomer, setLookupCustomer] = useState<KhachHang | null>(null);
   const [lookupLoading, setLookupLoading] = useState(false);
+
+  // Customer name search mode (fallback when scanner unavailable)
+  const [customerSearchMode, setCustomerSearchMode] = useState(false);
+  const [customerSearchText, setCustomerSearchText] = useState('');
+  const [customerPendingOrders, setCustomerPendingOrders] = useState<DonHang[]>([]);
+  const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
 
   // Tab 1: Mode 2 add services
   const [addServiceCart, setAddServiceCart] = useState<CartItem[]>([]);
@@ -256,6 +262,11 @@ export default function POSPage() {
       setLookupOrder(null);
       setLookupCode('');
       setLookupCustomer(null);
+      // Reset customer search state
+      setCustomerSearchMode(false);
+      setCustomerSearchText('');
+      setCustomerPendingOrders([]);
+      setShowCustomerSuggestions(false);
     }
     // Auto-focus the relevant input after React re-renders
     setTimeout(() => {
@@ -774,42 +785,233 @@ export default function POSPage() {
     }, 100);
   };
 
+  // Customer name search: filter allCustomers by name
+  const customerSuggestions = useMemo(() => {
+    if (!customerSearchText.trim()) return [];
+    const s = removeAccents(customerSearchText.trim().toLowerCase());
+    return allCustomers.filter(
+      (kh) => removeAccents(kh.hoTen.toLowerCase()).includes(s) || kh.soDienThoai.includes(customerSearchText.trim())
+    ).slice(0, 8);
+  }, [customerSearchText, allCustomers]);
+
+  // When user selects a customer from suggestions → load their pending orders
+  const handleSelectCustomerForLookup = async (kh: KhachHang) => {
+    setCustomerSearchText(kh.hoTen);
+    setShowCustomerSuggestions(false);
+    setLookupLoading(true);
+    try {
+      const orders = await donHangService.getByKhachHang(kh.maKhachHang);
+      // Filter: only show orders NOT yet returned (DA_GIAO) and NOT cancelled (DA_HUY)
+      const pending = orders.filter(
+        (o) => o.trangThai !== TrangThaiDonHang.DA_GIAO && o.trangThai !== TrangThaiDonHang.DA_HUY
+      );
+      setCustomerPendingOrders(pending);
+      if (pending.length === 0) {
+        toast('Khách hàng này không có đơn chưa hoàn thành', { icon: 'ℹ️' });
+      } else if (pending.length === 1) {
+        // Auto-select if only 1 pending order
+        setLookupOrder(pending[0]);
+        setLookupCustomer(kh);
+        setLookupCode(pending[0].maDonHang);
+        if (pending[0].danhSachDichVu.length === 0) setAddServiceCart([]);
+        toast.success(`Đã chọn đơn ${pending[0].maDonHang}`);
+      } else {
+        toast.success(`Tìm thấy ${pending.length} đơn chưa hoàn thành`);
+      }
+    } catch (err) {
+      logError(err, 'POSPage.handleSelectCustomerForLookup');
+      toast.error(getUserMessage(err));
+    }
+    setLookupLoading(false);
+  };
+
+  // When user clicks on a pending order from the list
+  const handleSelectPendingOrder = async (order: DonHang) => {
+    setLookupOrder(order);
+    setLookupCode(order.maDonHang);
+    const kh = await khachHangService.getById(order.maKhachHang);
+    setLookupCustomer(kh);
+    if (order.danhSachDichVu.length === 0) setAddServiceCart([]);
+    setCustomerPendingOrders([]);
+    toast.success(`Đã chọn đơn ${order.maDonHang}`);
+  };
+
   const renderOrderLookup = () => (
-    <Card sx={{ mb: 2 }}>
-      <CardContent sx={{ py: 2, '&:last-child': { pb: 2 } }}>
-        <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-          <QrCodeScanner sx={{ fontSize: 16, mr: 0.5, verticalAlign: 'text-bottom' }} />
-          Quét barcode hoặc nhập mã đơn hàng
-        </Typography>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <TextField
-            inputRef={lookupInputRef}
-            size="small" fullWidth
-            placeholder="Nhập mã đơn hàng..."
-            value={lookupCode}
-            onChange={(e) => setLookupCode(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleLookupOrder(); }}
-            InputProps={{ startAdornment: <InputAdornment position="start"><Search /></InputAdornment> }}
-          />
-          {/* Camera scan button — only on mobile (desktop has physical scanner) */}
-          <IconButton
-            onClick={() => setCameraScanOpen(true)}
-            color="primary"
-            title="Quét bằng camera"
+    <Card sx={{ mb: 2, overflow: 'visible' }}>
+      <CardContent sx={{ py: 2, '&:last-child': { pb: 2 }, overflow: 'visible' }}>
+        {/* Header with toggle button */}
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+          <Typography variant="subtitle2" color="text.secondary">
+            {customerSearchMode
+              ? <><Person sx={{ fontSize: 16, mr: 0.5, verticalAlign: 'text-bottom' }} />Tìm đơn theo tên khách hàng</>
+              : <><QrCodeScanner sx={{ fontSize: 16, mr: 0.5, verticalAlign: 'text-bottom' }} />Quét barcode hoặc nhập mã đơn hàng</>
+            }
+          </Typography>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<SwapHoriz />}
+            onClick={() => {
+              setCustomerSearchMode(!customerSearchMode);
+              setCustomerSearchText('');
+              setCustomerPendingOrders([]);
+              setShowCustomerSuggestions(false);
+              setLookupOrder(null);
+              setLookupCustomer(null);
+              setLookupCode('');
+            }}
             sx={{
-              display: { xs: 'flex', md: 'none' },
-              border: '1px solid', borderColor: 'primary.main',
-              borderRadius: 2, minWidth: 48, minHeight: 48,
+              textTransform: 'none', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap',
+              borderRadius: 2, px: 1.5, py: 0.5,
+              borderWidth: 2,
+              ...(customerSearchMode
+                ? {
+                    borderColor: '#1565c0', color: '#1565c0',
+                    bgcolor: 'rgba(21,101,192,0.08)',
+                    '&:hover': { bgcolor: 'rgba(21,101,192,0.16)', borderWidth: 2 },
+                  }
+                : {
+                    borderColor: '#e65100', color: '#e65100',
+                    bgcolor: 'rgba(230,81,0,0.08)',
+                    '&:hover': { bgcolor: 'rgba(230,81,0,0.16)', borderWidth: 2 },
+                  }
+              ),
             }}
           >
-            <CameraAlt />
-          </IconButton>
-          <Button variant="contained" onClick={handleLookupOrder}
-            disabled={lookupLoading}
-            sx={{ minWidth: 80, minHeight: 48 }}>
-            {lookupLoading ? <CircularProgress size={20} /> : 'Tìm'}
+            {customerSearchMode ? '🔢 Nhập mã đơn' : '👤 Tìm theo tên KH'}
           </Button>
         </Box>
+
+        {customerSearchMode ? (
+          /* ===== CUSTOMER NAME SEARCH MODE ===== */
+          <Box sx={{ position: 'relative' }}>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <TextField
+                inputRef={lookupInputRef}
+                size="small" fullWidth
+                placeholder="Nhập tên hoặc SĐT khách hàng..."
+                value={customerSearchText}
+                onChange={(e) => {
+                  setCustomerSearchText(e.target.value);
+                  setShowCustomerSuggestions(true);
+                  // Reset selected order when typing
+                  setCustomerPendingOrders([]);
+                  setLookupOrder(null);
+                  setLookupCustomer(null);
+                }}
+                onFocus={() => setShowCustomerSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowCustomerSuggestions(false), 200)}
+                InputProps={{ startAdornment: <InputAdornment position="start"><Person /></InputAdornment> }}
+              />
+            </Box>
+
+            {/* Customer suggestions dropdown */}
+            {showCustomerSuggestions && customerSuggestions.length > 0 && (
+              <Paper
+                elevation={4}
+                sx={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10, mt: 0.5, maxHeight: 250, overflow: 'auto' }}
+              >
+                <List dense disablePadding>
+                  {customerSuggestions.map((kh) => (
+                    <ListItemButton
+                      key={kh.maKhachHang}
+                      onClick={() => handleSelectCustomerForLookup(kh)}
+                      sx={{ py: 1 }}
+                    >
+                      <ListItemText
+                        primary={kh.hoTen}
+                        secondary={kh.soDienThoai}
+                        primaryTypographyProps={{ fontWeight: 600, fontSize: 14 }}
+                        secondaryTypographyProps={{ fontSize: 12 }}
+                      />
+                    </ListItemButton>
+                  ))}
+                </List>
+              </Paper>
+            )}
+
+            {/* Loading indicator */}
+            {lookupLoading && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+                <CircularProgress size={24} />
+              </Box>
+            )}
+
+            {/* Pending orders list */}
+            {customerPendingOrders.length > 1 && !lookupOrder && (
+              <Paper variant="outlined" sx={{ mt: 1.5, maxHeight: 300, overflow: 'auto' }}>
+                <Typography variant="subtitle2" sx={{ px: 2, pt: 1.5, pb: 0.5, color: 'text.secondary' }}>
+                  📋 Chọn đơn hàng ({customerPendingOrders.length} đơn chưa hoàn thành):
+                </Typography>
+                <List dense disablePadding>
+                  {customerPendingOrders.map((order) => (
+                    <ListItemButton
+                      key={order.maDonHang}
+                      onClick={() => handleSelectPendingOrder(order)}
+                      sx={{ py: 1, px: 2, '&:hover': { bgcolor: 'action.hover' } }}
+                    >
+                      <ListItemText
+                        primaryTypographyProps={{ component: 'div' }}
+                        secondaryTypographyProps={{ component: 'div' }}
+                        primary={
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Typography variant="body2" fontWeight={700}>{order.maDonHang}</Typography>
+                            <Chip
+                              label={TRANG_THAI_LABELS[order.trangThai]}
+                              size="small"
+                              sx={{ bgcolor: TRANG_THAI_COLORS[order.trangThai], color: 'white', fontWeight: 600, fontSize: 11, height: 22 }}
+                            />
+                          </Box>
+                        }
+                        secondary={
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
+                            <Typography variant="caption" color="text.secondary">
+                              {order.ngayTao?.toDate ? order.ngayTao.toDate().toLocaleDateString('vi-VN') : ''}
+                            </Typography>
+                            <Typography variant="caption" fontWeight={600} color="primary">
+                              {formatCurrency(order.tongTien)} {order.tienConLai > 0 && `(còn ${formatCurrency(order.tienConLai)})`}
+                            </Typography>
+                          </Box>
+                        }
+                      />
+                    </ListItemButton>
+                  ))}
+                </List>
+              </Paper>
+            )}
+          </Box>
+        ) : (
+          /* ===== BARCODE / ORDER CODE MODE (original) ===== */
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <TextField
+              inputRef={lookupInputRef}
+              size="small" fullWidth
+              placeholder="Nhập mã đơn hàng..."
+              value={lookupCode}
+              onChange={(e) => setLookupCode(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleLookupOrder(); }}
+              InputProps={{ startAdornment: <InputAdornment position="start"><Search /></InputAdornment> }}
+            />
+            {/* Camera scan button — only on mobile (desktop has physical scanner) */}
+            <IconButton
+              onClick={() => setCameraScanOpen(true)}
+              color="primary"
+              title="Quét bằng camera"
+              sx={{
+                display: { xs: 'flex', md: 'none' },
+                border: '1px solid', borderColor: 'primary.main',
+                borderRadius: 2, minWidth: 48, minHeight: 48,
+              }}
+            >
+              <CameraAlt />
+            </IconButton>
+            <Button variant="contained" onClick={handleLookupOrder}
+              disabled={lookupLoading}
+              sx={{ minWidth: 80, minHeight: 48 }}>
+              {lookupLoading ? <CircularProgress size={20} /> : 'Tìm'}
+            </Button>
+          </Box>
+        )}
       </CardContent>
     </Card>
   );

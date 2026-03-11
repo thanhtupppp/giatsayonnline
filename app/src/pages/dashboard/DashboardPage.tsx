@@ -18,7 +18,7 @@ import { khachHangService } from '../../services/khachHangService';
 import { dichVuService } from '../../services/dichVuService';
 import { cuaHangService } from '../../services/cuaHangService';
 import { userService } from '../../services/userService';
-import type { DonHang, CuaHang, User } from '../../types';
+import type { DonHang, CuaHang, User, KhachHang } from '../../types';
 import { TrangThaiDonHang, TrangThaiCuaHang, VaiTro } from '../../types';
 import { formatCurrency, TRANG_THAI_LABELS, TRANG_THAI_COLORS } from '../../utils/constants';
 
@@ -217,6 +217,7 @@ function ShopDashboard({ userProfile }: { userProfile: any }) {
   const [donHangs, setDonHangs] = useState<DonHang[]>([]);
   const [tongKH, setTongKH] = useState(0);
   const [tongDV, setTongDV] = useState(0);
+  const [customerMap, setCustomerMap] = useState<Record<string, KhachHang>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -231,6 +232,10 @@ function ShopDashboard({ userProfile }: { userProfile: any }) {
         setDonHangs(dh);
         setTongKH(kh.length);
         setTongDV(dv.filter((d) => d.trangThai).length);
+        // Build customer lookup map
+        const map: Record<string, KhachHang> = {};
+        kh.forEach((k) => { map[k.maKhachHang] = k; });
+        setCustomerMap(map);
       } catch { /* fallback to empty */ }
       setLoading(false);
     };
@@ -330,6 +335,7 @@ function ShopDashboard({ userProfile }: { userProfile: any }) {
                 <TableHead>
                   <TableRow>
                     <TableCell sx={{ fontWeight: 600 }}>Mã đơn</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>Khách hàng</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Ngày tạo</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Tổng tiền</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Trạng thái</TableCell>
@@ -340,6 +346,9 @@ function ShopDashboard({ userProfile }: { userProfile: any }) {
                   {recentOrders.map((dh) => (
                     <TableRow key={dh.maDonHang} hover>
                       <TableCell sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{dh.maDonHang}</TableCell>
+                      <TableCell>
+                        {customerMap[dh.maKhachHang]?.hoTen || '—'}
+                      </TableCell>
                       <TableCell>{formatDate(dh.ngayTao)}</TableCell>
                       <TableCell>{formatCurrency(dh.tongTien)}</TableCell>
                       <TableCell>
