@@ -11,6 +11,7 @@ import {
   ExpandLess, Receipt, AttachMoney, AccountBalance, CreditCard,
   PhoneAndroid, ArrowBack, CheckCircle, LocalShipping,
   QrCodeScanner, CameraAlt, SwapHoriz, Person,
+  ChevronLeft, ChevronRight,
 } from '@mui/icons-material';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
@@ -260,6 +261,14 @@ export default function POSPage() {
     const returnOrders = orders.filter((o) => o.trangThai === TrangThaiDonHang.HOAN_THANH);
     setPendingReturnCount(returnOrders.length);
     setPendingReturnOrders(returnOrders);
+  };
+
+  // UI scroll helper for POS machines where swiping is difficult
+  const handleScroll = (e: React.MouseEvent, direction: 'left' | 'right') => {
+    const container = (e.currentTarget.closest('.scroll-wrapper') as HTMLElement)?.querySelector('.order-scroll-container');
+    if (container) {
+      container.scrollBy({ left: direction === 'left' ? -250 : 250, behavior: 'smooth' });
+    }
   };
 
   // Helper: switch tab and auto-focus the relevant input
@@ -1501,18 +1510,27 @@ export default function POSPage() {
 
             {/* Quick list of orders needing "Giặt xong" (if no order is currently looked up) */}
             {!lookupOrder && pendingWashOrders.length > 0 && (
-              <Card sx={{ mb: 2 }}>
+              <Card sx={{ mb: 2 }} className="scroll-wrapper">
                 <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
-                  <Typography variant="subtitle2" color="primary" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    ⏳ Đơn đang xử lý ({pendingWashCount})
-                  </Typography>
-                  <Box sx={{
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                    <Typography variant="subtitle2" color="primary" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      ⏳ Đơn đang xử lý ({pendingWashCount})
+                    </Typography>
+                    {pendingWashOrders.length > 2 && (
+                      <Box>
+                        <IconButton size="small" onClick={(e) => handleScroll(e, 'left')} sx={{ border: '1px solid', borderColor: 'divider', mr: 1, bgcolor: 'background.paper', boxShadow: 1 }}><ChevronLeft /></IconButton>
+                        <IconButton size="small" onClick={(e) => handleScroll(e, 'right')} sx={{ border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', boxShadow: 1 }}><ChevronRight /></IconButton>
+                      </Box>
+                    )}
+                  </Box>
+                  <Box className="order-scroll-container" sx={{
                     overflowX: 'auto',
                     overflowY: 'hidden',
                     whiteSpace: 'nowrap',
                     mx: -1.5, // Negate card padding to let scroll edge hit the bounds
                     px: 1.5,
                     pb: 1,
+                    scrollBehavior: 'smooth',
                     // Hide scrollbar for a cleaner look
                     scrollbarWidth: 'none',
                     msOverflowStyle: 'none',
@@ -1641,18 +1659,27 @@ export default function POSPage() {
 
             {/* Quick list of orders needing "Trả đồ" (if no order is currently looked up) */}
             {!lookupOrder && pendingReturnOrders.length > 0 && (
-              <Card sx={{ mb: 2 }}>
+              <Card sx={{ mb: 2 }} className="scroll-wrapper">
                 <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
-                  <Typography variant="subtitle2" color="success.main" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    ✅ Đơn đã xong, chờ trả khách ({pendingReturnCount})
-                  </Typography>
-                  <Box sx={{
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                    <Typography variant="subtitle2" color="success.main" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      ✅ Đơn đã xong, chờ trả khách ({pendingReturnCount})
+                    </Typography>
+                    {pendingReturnOrders.length > 2 && (
+                      <Box>
+                        <IconButton size="small" onClick={(e) => handleScroll(e, 'left')} sx={{ border: '1px solid', borderColor: 'divider', mr: 1, bgcolor: 'background.paper', boxShadow: 1 }}><ChevronLeft /></IconButton>
+                        <IconButton size="small" onClick={(e) => handleScroll(e, 'right')} sx={{ border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', boxShadow: 1 }}><ChevronRight /></IconButton>
+                      </Box>
+                    )}
+                  </Box>
+                  <Box className="order-scroll-container" sx={{
                     overflowX: 'auto',
                     overflowY: 'hidden',
                     whiteSpace: 'nowrap',
                     mx: -1.5,
                     px: 1.5,
                     pb: 1,
+                    scrollBehavior: 'smooth',
                     scrollbarWidth: 'none',
                     msOverflowStyle: 'none',
                     '&::-webkit-scrollbar': { display: 'none' }
