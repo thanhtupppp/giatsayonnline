@@ -7,17 +7,17 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function isSelf(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+    // Đọc user doc để lấy maCuaHang — dùng get() vì chưa có custom claims
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
     }
 
-    // ✅ Dùng Custom Claims — không tốn reads
     function userStoreId() {
-      return request.auth.token.maCuaHang;
+      return userDoc().data.maCuaHang;
     }
 
     function userRole() {
-      return request.auth.token.vaiTro;
+      return userDoc().data.vaiTro;
     }
 
     function isAdmin() {
@@ -28,8 +28,8 @@ service cloud.firestore {
       return isSignedIn() && userStoreId() == storeId;
     }
 
-    // Users: đọc profile bằng uid trực tiếp — không dùng claims
-    // vì đây chính là bước lấy thông tin để set claims
+    // Users: đọc profile bằng uid trực tiếp — không cần claims/get()
+    // vì đây chính là bước đầu tiên sau khi login
     match /users/{userId} {
       allow get: if isSignedIn() && request.auth.uid == userId;
       allow create, update, delete: if isSignedIn() && request.auth.uid == userId;
@@ -80,7 +80,7 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && isSameStore(request.resource.data.maCuaHang);
 
-      allow update, delete: if isAdmin()
+      allow update, delete: if isSignedIn()
         && isSameStore(resource.data.maCuaHang);
     }
 
@@ -98,7 +98,7 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && isSameStore(request.resource.data.maCuaHang);
 
-      allow update, delete: if isAdmin()
+      allow update, delete: if isSignedIn()
         && isSameStore(resource.data.maCuaHang);
     }
 
@@ -110,7 +110,7 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && isSameStore(request.resource.data.maCuaHang);
 
-      allow update, delete: if isAdmin()
+      allow update, delete: if isSignedIn()
         && isSameStore(resource.data.maCuaHang);
     }
 
@@ -142,7 +142,7 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && isSameStore(request.resource.data.maCuaHang);
 
-      allow update, delete: if isAdmin()
+      allow update, delete: if isSignedIn()
         && isSameStore(resource.data.maCuaHang);
     }
 
@@ -154,7 +154,7 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && isSameStore(request.resource.data.maCuaHang);
 
-      allow update, delete: if isAdmin()
+      allow update, delete: if isSignedIn()
         && isSameStore(resource.data.maCuaHang);
     }
 
