@@ -255,6 +255,7 @@ export default function DonHangPage() {
         userProfile?.uid || "",
         isAdminOverride ? "Admin sửa trạng thái" : undefined,
         isAdminOverride ? vaiTro : undefined,
+        userProfile?.maCuaHang || "",
       );
       toast.success("Cập nhật trạng thái thành công");
 
@@ -314,7 +315,7 @@ export default function DonHangPage() {
   const handleDeleteOrder = async () => {
     if (!orderToDelete) return;
     try {
-      await donHangService.delete(orderToDelete.maDonHang);
+      await donHangService.delete(orderToDelete.maDonHang, userProfile?.maCuaHang || "");
       toast.success("Xóa đơn hàng thành công");
       setDeleteConfirmOpen(false);
       setOrderToDelete(null);

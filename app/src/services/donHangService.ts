@@ -335,8 +335,9 @@ export const donHangService = {
     userId: string,
     ghiChu?: string,
     vaiTro?: VaiTro,
+    maCuaHang?: string,
   ): Promise<void> {
-    const docId = await donHangService._resolveDocId(id);
+    const docId = await donHangService._resolveDocId(id, maCuaHang);
     const docSnap = await getDoc(doc(db, COLLECTION, docId));
     if (!docSnap.exists()) throw new Error("Đơn hàng không tồn tại");
 
@@ -385,8 +386,9 @@ export const donHangService = {
     id: string,
     danhSachDichVu: ChiTietDichVu[],
     userId: string,
+    maCuaHang?: string,
   ): Promise<void> {
-    const docId = await donHangService._resolveDocId(id);
+    const docId = await donHangService._resolveDocId(id, maCuaHang);
     const docSnap = await getDoc(doc(db, COLLECTION, docId));
     if (!docSnap.exists()) throw new Error("Đơn hàng không tồn tại");
 
@@ -420,8 +422,8 @@ export const donHangService = {
     });
   },
 
-  async updatePayment(id: string, soTienTra: number): Promise<void> {
-    const docId = await donHangService._resolveDocId(id);
+  async updatePayment(id: string, soTienTra: number, maCuaHang?: string): Promise<void> {
+    const docId = await donHangService._resolveDocId(id, maCuaHang);
 
     const awardInfo = await runTransaction(
       db,
@@ -465,8 +467,8 @@ export const donHangService = {
     }
   },
 
-  async delete(id: string): Promise<void> {
-    const docId = await donHangService._resolveDocId(id);
+  async delete(id: string, maCuaHang?: string): Promise<void> {
+    const docId = await donHangService._resolveDocId(id, maCuaHang);
     await deleteDoc(doc(db, COLLECTION, docId));
   },
 

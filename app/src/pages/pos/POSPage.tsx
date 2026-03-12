@@ -840,6 +840,7 @@ export default function POSPage() {
           lookupOrder.maDonHang,
           services,
           userProfile?.uid || "",
+          maCuaHang,
         );
       }
       await donHangService.updateStatus(
@@ -847,6 +848,8 @@ export default function POSPage() {
         TrangThaiDonHang.HOAN_THANH,
         userProfile?.uid || "",
         "Giặt xong — POS",
+        undefined,
+        maCuaHang,
       );
       toast.success("Đã báo giặt xong! ✅");
       // Refresh
@@ -896,6 +899,8 @@ export default function POSPage() {
         TrangThaiDonHang.DA_GIAO,
         userProfile?.uid || "",
         "Thanh toán & Trả đồ cho KH — POS",
+        undefined,
+        maCuaHang,
       );
       toast.success("Đã trả đồ cho khách hàng! 🎉");
       const updated = await donHangService.getById(lookupOrder.maDonHang);
