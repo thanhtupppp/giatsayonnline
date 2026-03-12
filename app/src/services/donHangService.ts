@@ -85,12 +85,24 @@ async function generateMaDonHang(maCuaHang: string): Promise<string> {
 
 export const donHangService = {
   // Helper: resolve maDonHang to Firestore document ID
-  async _resolveDocId(idOrMaDonHang: string): Promise<string> {
+  // Hỗ trợ cả đơn mới (doc ID = maDonHang) và đơn cũ (doc ID = auto-generated)
+  async _resolveDocId(idOrMaDonHang: string, maCuaHang?: string): Promise<string> {
+    // Try 1: treat as document ID directly (đơn mới)
     const docSnap = await getDoc(doc(db, COLLECTION, idOrMaDonHang));
-    if (!docSnap.exists()) {
-      throw new Error("Đơn hàng không tồn tại");
+    if (docSnap.exists()) return idOrMaDonHang;
+
+    // Try 2: fallback query by maDonHang field (đơn cũ dùng addDoc auto-ID)
+    const constraints: QueryConstraint[] = [
+      where("maDonHang", "==", idOrMaDonHang),
+    ];
+    if (maCuaHang) {
+      constraints.push(where("maCuaHang", "==", maCuaHang));
     }
-    return idOrMaDonHang;
+    const q = query(collection(db, COLLECTION), ...constraints, limit(1));
+    const snapshot = await getDocs(q);
+    if (!snapshot.empty) return snapshot.docs[0].id;
+
+    throw new Error("Đơn hàng không tồn tại");
   },
 
   async create(data: {
@@ -165,14 +177,29 @@ export const donHangService = {
   },
 
   async getById(id: string): Promise<DonHang | null> {
+    // Try 1: direct doc lookup (đơn mới: doc ID = maDonHang)
     const docSnap = await getDoc(doc(db, COLLECTION, id));
     if (docSnap.exists()) return docSnap.data() as DonHang;
     return null;
   },
 
-  async getByMaDonHang(maDonHang: string): Promise<DonHang | null> {
+  // Tìm đơn hàng theo maDonHang, hỗ trợ cả đơn cũ (auto-ID) và đơn mới (doc ID = maDonHang)
+  async getByMaDonHang(maDonHang: string, maCuaHang?: string): Promise<DonHang | null> {
+    // Try 1: direct doc lookup (đơn mới)
     const docSnap = await getDoc(doc(db, COLLECTION, maDonHang));
     if (docSnap.exists()) return docSnap.data() as DonHang;
+
+    // Try 2: fallback query (đơn cũ) — cần maCuaHang cho security rules
+    if (maCuaHang) {
+      const q = query(
+        collection(db, COLLECTION),
+        where("maCuaHang", "==", maCuaHang),
+        where("maDonHang", "==", maDonHang),
+        limit(1),
+      );
+      const snapshot = await getDocs(q);
+      if (!snapshot.empty) return snapshot.docs[0].data() as DonHang;
+    }
     return null;
   },
 

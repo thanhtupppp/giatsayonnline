@@ -43,7 +43,7 @@ export const giaoDichService = {
     if (data.soTien === 0) throw new Error("Số tiền phải khác 0");
 
     // Resolve maDonHang to actual Firestore doc ID
-    const donHangDocId = await donHangService._resolveDocId(data.maDonHang);
+    const donHangDocId = await donHangService._resolveDocId(data.maDonHang, data.maCuaHang);
 
     // Mượn reference trước khi transaction
     const giaoDichRef = doc(collection(db, COLLECTION));

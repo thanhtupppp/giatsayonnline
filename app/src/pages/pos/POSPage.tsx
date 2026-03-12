@@ -243,7 +243,7 @@ export default function POSPage() {
       const job = remotePrintQueue[0];
       setRemotePrintingJob(job);
       try {
-        const order = await donHangService.getByMaDonHang(job.maDonHang);
+        const order = await donHangService.getByMaDonHang(job.maDonHang, maCuaHang);
         if (order) {
           const cust = await khachHangService.getById(order.maKhachHang);
           setRemotePrintingCustomer(cust);
@@ -801,7 +801,7 @@ export default function POSPage() {
     }
     setLookupLoading(true);
     try {
-      const order = await donHangService.getByMaDonHang(lookupCode.trim());
+      const order = await donHangService.getByMaDonHang(lookupCode.trim(), maCuaHang);
       if (!order) {
         toast.error("Không tìm thấy đơn hàng");
         setLookupOrder(null);
@@ -967,7 +967,7 @@ export default function POSPage() {
       (async () => {
         setLookupLoading(true);
         try {
-          const order = await donHangService.getByMaDonHang(trimmedCode);
+          const order = await donHangService.getByMaDonHang(trimmedCode, maCuaHang);
           if (!order) {
             toast.error("Không tìm thấy đơn hàng");
             setLookupOrder(null);
