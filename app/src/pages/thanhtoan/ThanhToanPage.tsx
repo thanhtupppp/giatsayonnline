@@ -19,6 +19,7 @@ import type { DonHang, GiaoDich } from '../../types';
 import { PhuongThucThanhToan } from '../../types';
 import { formatCurrency, TRANG_THAI_LABELS, TRANG_THAI_COLORS } from '../../utils/constants';
 import { logError, getUserMessage } from '../../utils/errorHandler';
+import { khachHangService } from '../../services/khachHangService';
 
 const PHUONG_THUC_OPTIONS = [
   { value: PhuongThucThanhToan.TIEN_MAT, label: 'Tiền mặt', icon: <AttachMoney /> },
@@ -34,6 +35,9 @@ export default function ThanhToanPage() {
   const { userProfile } = useAuth();
   const [donHangs, setDonHangs] = useState<DonHang[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Customer mapping: maKhachHang → { hoTen, soDienThoai }
+  const [customerMap, setCustomerMap] = useState<Record<string, { hoTen: string; soDienThoai: string }>>({});
 
   // Yêu Cầu 11: Pagination state
   const [hasMore, setHasMore] = useState(false);
@@ -59,15 +63,24 @@ export default function ThanhToanPage() {
   const loadData = async (cursor?: any) => {
     setLoading(true);
     try {
-      const result = await donHangService.getByMaCuaHangPaginated(
-        userProfile?.maCuaHang || '',
-        { lastDoc: cursor || null }
-      );
+      const maCuaHang = userProfile?.maCuaHang || '';
+      const [result, customers] = await Promise.all([
+        donHangService.getByMaCuaHangPaginated(
+          maCuaHang,
+          { lastDoc: cursor || null }
+        ),
+        khachHangService.getByMaCuaHang(maCuaHang)
+      ]);
       setDonHangs(result.data);
       setHasMore(result.hasMore);
       if (result.lastDoc) {
         cursorStackRef.current[page + 1] = result.lastDoc;
       }
+
+      // Build customer maKhachHang → { hoTen, soDienThoai } map
+      const custMap: Record<string, { hoTen: string; soDienThoai: string }> = {};
+      customers.forEach(c => { custMap[c.maKhachHang] = { hoTen: c.hoTen, soDienThoai: c.soDienThoai }; });
+      setCustomerMap(custMap);
     } catch (err) {
       logError(err, 'ThanhToanPage.loadData');
       toast.error(getUserMessage(err));
@@ -209,6 +222,7 @@ export default function ThanhToanPage() {
             <TableHead>
               <TableRow sx={{ bgcolor: 'grey.50' }}>
                 <TableCell sx={{ fontWeight: 600 }}>Mã đơn</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>Khách hàng</TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>Ngày tạo</TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>Tổng tiền</TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>Đã trả</TableCell>
@@ -219,10 +233,20 @@ export default function ThanhToanPage() {
             </TableHead>
             <TableBody>
               {displayedOrders.length === 0 ? (
-                <TableRow><TableCell colSpan={7} align="center" sx={{ py: 4 }}>Không có dữ liệu</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} align="center" sx={{ py: 4 }}>Không có dữ liệu</TableCell></TableRow>
               ) : displayedOrders.map((dh) => (
                 <TableRow key={dh.maDonHang} hover>
                   <TableCell sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{dh.maDonHang}</TableCell>
+                  <TableCell>
+                    {customerMap[dh.maKhachHang] ? (
+                      <Box>
+                        <Typography variant="body2" fontWeight={600} noWrap>{customerMap[dh.maKhachHang].hoTen}</Typography>
+                        <Typography variant="caption" color="text.secondary">{customerMap[dh.maKhachHang].soDienThoai}</Typography>
+                      </Box>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">-</Typography>
+                    )}
+                  </TableCell>
                   <TableCell>{formatDate(dh.ngayTao)}</TableCell>
                   <TableCell>{formatCurrency(dh.tongTien)}</TableCell>
                   <TableCell sx={{ color: 'success.main' }}>{formatCurrency(dh.tienDaTra)}</TableCell>

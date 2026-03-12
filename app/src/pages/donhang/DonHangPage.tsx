@@ -1,24 +1,60 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef } from "react";
 import {
-  Box, Typography, Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, Paper, Chip, Select, MenuItem,
-  FormControl, InputLabel, IconButton, CircularProgress, Button,
-  Dialog, DialogTitle, DialogContent, DialogActions, Stepper, Step, StepLabel,
-  TextField, InputAdornment, TableSortLabel
-} from '@mui/material';
-import { Visibility, Search, Print, Warning, NavigateNext, NavigateBefore, Delete } from '@mui/icons-material';
-import toast from 'react-hot-toast';
-import { format } from 'date-fns';
-import { vi } from 'date-fns/locale';
-import { useAuth } from '../../contexts/AuthContext';
-import { donHangService } from '../../services/donHangService';
-import { userService } from '../../services/userService';
-import type { DonHang } from '../../types';
-import { TrangThaiDonHang, VaiTro } from '../../types';
-import { TRANG_THAI_LABELS, TRANG_THAI_COLORS, formatCurrency, getStatusTransitionsForRole, VALID_STATUS_TRANSITIONS } from '../../utils/constants';
-import { logError, getUserMessage } from '../../utils/errorHandler';
-import { printService } from '../../services/printService';
-import { khachHangService } from '../../services/khachHangService';
+  Box,
+  Typography,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  Chip,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  IconButton,
+  CircularProgress,
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Stepper,
+  Step,
+  StepLabel,
+  TextField,
+  InputAdornment,
+  TableSortLabel,
+} from "@mui/material";
+import {
+  Visibility,
+  Search,
+  Print,
+  Warning,
+  NavigateNext,
+  NavigateBefore,
+  Delete,
+} from "@mui/icons-material";
+import toast from "react-hot-toast";
+import { format } from "date-fns";
+import { vi } from "date-fns/locale";
+import { useAuth } from "../../contexts/AuthContext";
+import { donHangService } from "../../services/donHangService";
+import { userService } from "../../services/userService";
+import type { DonHang } from "../../types";
+import { TrangThaiDonHang, VaiTro } from "../../types";
+import {
+  TRANG_THAI_LABELS,
+  TRANG_THAI_COLORS,
+  formatCurrency,
+  getStatusTransitionsForRole,
+  VALID_STATUS_TRANSITIONS,
+} from "../../utils/constants";
+import { logError, getUserMessage } from "../../utils/errorHandler";
+import { printService } from "../../services/printService";
+import { khachHangService } from "../../services/khachHangService";
 
 export default function DonHangPage() {
   const { userProfile } = useAuth();
@@ -26,16 +62,16 @@ export default function DonHangPage() {
   const [donHangs, setDonHangs] = useState<DonHang[]>([]);
 
   const [loading, setLoading] = useState(true);
-  const [filterStatus, setFilterStatus] = useState<TrangThaiDonHang | ''>('');
-  const [searchPhone, setSearchPhone] = useState('');
-  const [filterDateFrom, setFilterDateFrom] = useState('');
-  const [filterDateTo, setFilterDateTo] = useState('');
+  const [filterStatus, setFilterStatus] = useState<TrangThaiDonHang | "">("");
+  const [searchPhone, setSearchPhone] = useState("");
+  const [filterDateFrom, setFilterDateFrom] = useState("");
+  const [filterDateTo, setFilterDateTo] = useState("");
   const [detailOpen, setDetailOpen] = useState(false);
   const [selected, setSelected] = useState<DonHang | null>(null);
 
   // Sorting state
-  const [orderDirection, setOrderDirection] = useState<'asc' | 'desc'>('desc');
-  const [orderBy, setOrderBy] = useState<string>('ngayTao');
+  const [orderDirection, setOrderDirection] = useState<"asc" | "desc">("desc");
+  const [orderBy, setOrderBy] = useState<string>("ngayTao");
 
   // Delete control
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -44,66 +80,94 @@ export default function DonHangPage() {
   // Employee name mapping: uid → hoTen
   const [employeeMap, setEmployeeMap] = useState<Record<string, string>>({});
   // Customer mapping: maKhachHang → { hoTen, soDienThoai }
-  const [customerMap, setCustomerMap] = useState<Record<string, { hoTen: string; soDienThoai: string }>>({}); 
+  const [customerMap, setCustomerMap] = useState<
+    Record<string, { hoTen: string; soDienThoai: string }>
+  >({});
 
   // Yêu Cầu 11: Pagination state
   const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(0);
   const cursorStackRef = useRef<any[]>([null]); // stack of lastDoc cursors per page
 
-  const loadData = async (cursor?: any) => {
+  const loadData = async (
+    cursor?: any,
+    currentPage = 0,
+  ): Promise<DonHang[] | null> => {
     setLoading(true);
     try {
-      const maCuaHang = userProfile?.maCuaHang || '';
-      const [result, employees, customers] = await Promise.all([
-        donHangService.getByMaCuaHangPaginated(
-          maCuaHang,
-          {
-            trangThai: filterStatus ? (filterStatus as TrangThaiDonHang) : undefined,
-            lastDoc: cursor || null,
-          }
-        ),
-        userService.getByMaCuaHang(maCuaHang),
-        khachHangService.getByMaCuaHang(maCuaHang),
-      ]);
+      const maCuaHang = userProfile?.maCuaHang || "";
+      const result = await donHangService.getByMaCuaHangPaginated(maCuaHang, {
+        trangThai: filterStatus
+          ? (filterStatus as TrangThaiDonHang)
+          : undefined,
+        lastDoc: cursor || null,
+      });
       setDonHangs(result.data);
       setHasMore(result.hasMore);
       // Store cursor for next page
       if (result.lastDoc) {
-        cursorStackRef.current[page + 1] = result.lastDoc;
+        cursorStackRef.current[currentPage + 1] = result.lastDoc;
       }
-      // Build employee uid → name map
-      const map: Record<string, string> = {};
-      employees.forEach(e => { map[e.uid] = e.hoTen; });
-      setEmployeeMap(map);
-      // Build customer maKhachHang → { hoTen, soDienThoai } map
-      const custMap: Record<string, { hoTen: string; soDienThoai: string }> = {};
-      customers.forEach(c => { custMap[c.maKhachHang] = { hoTen: c.hoTen, soDienThoai: c.soDienThoai }; });
-      setCustomerMap(custMap);
+      return result.data;
     } catch (err) {
-      logError(err, 'DonHangPage.loadData');
+      logError(err, "DonHangPage.loadData");
       toast.error(getUserMessage(err));
+      return null;
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => {
+    const maCuaHang = userProfile?.maCuaHang || "";
+    if (!maCuaHang) return;
+    Promise.all([
+      userService.getByMaCuaHang(maCuaHang),
+      khachHangService.getByMaCuaHang(maCuaHang),
+    ])
+      .then(([employees, customers]) => {
+        const map: Record<string, string> = {};
+        employees.forEach((e) => {
+          map[e.uid] = e.hoTen;
+        });
+        setEmployeeMap(map);
+
+        const custMap: Record<string, { hoTen: string; soDienThoai: string }> =
+          {};
+        customers.forEach((c) => {
+          custMap[c.maKhachHang] = {
+            hoTen: c.hoTen,
+            soDienThoai: c.soDienThoai,
+          };
+        });
+        setCustomerMap(custMap);
+      })
+      .catch((err) => {
+        logError(err, "DonHangPage.loadReferenceData");
+        toast.error(getUserMessage(err));
+      });
+  }, [userProfile?.maCuaHang]);
+
+  useEffect(() => {
+    if (!userProfile?.maCuaHang) return;
     setPage(0);
     cursorStackRef.current = [null];
-    loadData();
-  }, [filterStatus]);
+    loadData(undefined, 0);
+  }, [filterStatus, userProfile?.maCuaHang]);
 
   const handleNextPage = () => {
-    const nextCursor = cursorStackRef.current[page + 1];
-    setPage(page + 1);
-    loadData(nextCursor);
+    const nextPage = page + 1;
+    const nextCursor = cursorStackRef.current[nextPage];
+    setPage(nextPage);
+    loadData(nextCursor, nextPage);
   };
 
   const handlePrevPage = () => {
     if (page <= 0) return;
-    const prevCursor = cursorStackRef.current[page - 1];
-    setPage(page - 1);
-    loadData(prevCursor);
+    const prevPage = page - 1;
+    const prevCursor = cursorStackRef.current[prevPage];
+    setPage(prevPage);
+    loadData(prevCursor, prevPage);
   };
 
   // #25-27: Filter by phone/code and date range (client-side)
@@ -115,7 +179,9 @@ export default function DonHangPage() {
       const custInfo = customerMap[dh.maKhachHang];
       const matchCode = dh.maDonHang.toUpperCase().includes(sUpper);
       const matchCustName = custInfo?.hoTen?.toLowerCase().includes(s);
-      const matchCustPhone = custInfo?.soDienThoai?.includes(searchPhone.trim());
+      const matchCustPhone = custInfo?.soDienThoai?.includes(
+        searchPhone.trim(),
+      );
       if (!matchCode && !matchCustName && !matchCustPhone) return false;
     }
     // Date range filter
@@ -135,71 +201,88 @@ export default function DonHangPage() {
   });
 
   const handleRequestSort = (property: string) => {
-    const isAsc = orderBy === property && orderDirection === 'asc';
-    setOrderDirection(isAsc ? 'desc' : 'asc');
+    const isAsc = orderBy === property && orderDirection === "asc";
+    setOrderDirection(isAsc ? "desc" : "asc");
     setOrderBy(property);
   };
 
   const sortedOrders = [...filteredOrders].sort((a, b) => {
     let result = 0;
     switch (orderBy) {
-      case 'maDonHang':
+      case "maDonHang":
         result = a.maDonHang.localeCompare(b.maDonHang);
         break;
-      case 'khachHang':
-        const nameA = customerMap[a.maKhachHang]?.hoTen || '';
-        const nameB = customerMap[b.maKhachHang]?.hoTen || '';
-        result = nameA.localeCompare(nameB, 'vi');
+      case "khachHang":
+        const nameA = customerMap[a.maKhachHang]?.hoTen || "";
+        const nameB = customerMap[b.maKhachHang]?.hoTen || "";
+        result = nameA.localeCompare(nameB, "vi");
         break;
-      case 'ngayHenTra':
+      case "ngayHenTra":
         const timeA = a.ngayHenTra?.toMillis?.() || 0;
         const timeB = b.ngayHenTra?.toMillis?.() || 0;
         result = timeA - timeB;
         break;
-      case 'tongTien':
+      case "tongTien":
         result = a.tongTien - b.tongTien;
         break;
-      case 'tienDaTra':
+      case "tienDaTra":
         result = a.tienDaTra - b.tienDaTra;
         break;
-      case 'maNhanVien':
-        const empA = employeeMap[a.maNhanVien] || '';
-        const empB = employeeMap[b.maNhanVien] || '';
-        result = empA.localeCompare(empB, 'vi');
+      case "maNhanVien":
+        const empA = employeeMap[a.maNhanVien] || "";
+        const empB = employeeMap[b.maNhanVien] || "";
+        result = empA.localeCompare(empB, "vi");
         break;
-      case 'ngayTao':
+      case "ngayTao":
       default:
         const tA = a.ngayTao?.toMillis?.() || 0;
         const tB = b.ngayTao?.toMillis?.() || 0;
         result = tA - tB;
         break;
     }
-    return orderDirection === 'asc' ? result : -result;
+    return orderDirection === "asc" ? result : -result;
   });
 
-  const handleUpdateStatus = async (id: string, newStatus: TrangThaiDonHang, isAdminOverride = false) => {
+  const handleUpdateStatus = async (
+    id: string,
+    newStatus: TrangThaiDonHang,
+    isAdminOverride = false,
+  ) => {
     try {
       await donHangService.updateStatus(
         id,
         newStatus,
-        userProfile?.uid || '',
-        isAdminOverride ? 'Admin sửa trạng thái' : undefined,
-        isAdminOverride ? vaiTro : undefined
+        userProfile?.uid || "",
+        isAdminOverride ? "Admin sửa trạng thái" : undefined,
+        isAdminOverride ? vaiTro : undefined,
       );
-      toast.success('Cập nhật trạng thái thành công');
+      toast.success("Cập nhật trạng thái thành công");
 
       // #8: Notify when HOAN_THANH or DA_GIAO
       if (newStatus === TrangThaiDonHang.HOAN_THANH) {
-        toast('📱 Đã gửi thông báo "Đơn hàng hoàn thành" cho khách hàng', { icon: '🔔', duration: 4000 });
+        toast('📱 Đã gửi thông báo "Đơn hàng hoàn thành" cho khách hàng', {
+          icon: "🔔",
+          duration: 4000,
+        });
       } else if (newStatus === TrangThaiDonHang.DA_GIAO) {
-        toast('📱 Đã gửi thông báo "Đơn hàng đã giao" cho khách hàng', { icon: '🔔', duration: 4000 });
+        toast('📱 Đã gửi thông báo "Đơn hàng đã giao" cho khách hàng', {
+          icon: "🔔",
+          duration: 4000,
+        });
       }
-      loadData();
-      if (selected) {
-        const updated = await donHangService.getById(id);
+
+      const refreshed = await loadData(
+        cursorStackRef.current[page] || null,
+        page,
+      );
+      if (selected && refreshed) {
+        const updated = refreshed.find((order) => order.maDonHang === id);
         if (!updated) {
           // Criteria 1: Order not found
-          toast.error('Không tìm thấy đơn hàng. Thử tìm kiếm theo số điện thoại khách hàng.', { duration: 5000 });
+          toast.error(
+            "Không tìm thấy đơn hàng. Thử tìm kiếm theo số điện thoại khách hàng.",
+            { duration: 5000 },
+          );
           setSelected(null);
           setDetailOpen(false);
           return;
@@ -207,17 +290,17 @@ export default function DonHangPage() {
         setSelected(updated);
       }
     } catch (err: any) {
-      logError(err, 'DonHangPage.handleUpdateStatus', { id, newStatus });
+      logError(err, "DonHangPage.handleUpdateStatus", { id, newStatus });
       // Criteria 2: Invalid status transition → show valid statuses
-      if (err.message?.includes('Không thể chuyển')) {
+      if (err.message?.includes("Không thể chuyển")) {
         const current = selected?.trangThai;
         if (current) {
           const validStatuses = VALID_STATUS_TRANSITIONS[current]
             ?.map((s) => TRANG_THAI_LABELS[s])
-            .join(', ');
+            .join(", ");
           toast.error(
-            `${err.message}\n\nTrạng thái hợp lệ: ${validStatuses || 'Không có'}`,
-            { duration: 6000 }
+            `${err.message}\n\nTrạng thái hợp lệ: ${validStatuses || "Không có"}`,
+            { duration: 6000 },
           );
         } else {
           toast.error(err.message);
@@ -232,19 +315,23 @@ export default function DonHangPage() {
     if (!orderToDelete) return;
     try {
       await donHangService.delete(orderToDelete.maDonHang);
-      toast.success('Xóa đơn hàng thành công');
+      toast.success("Xóa đơn hàng thành công");
       setDeleteConfirmOpen(false);
       setOrderToDelete(null);
-      loadData();
+      await loadData(cursorStackRef.current[page] || null, page);
     } catch (err) {
-      logError(err, 'DonHangPage.handleDeleteOrder', { id: orderToDelete.maDonHang });
+      logError(err, "DonHangPage.handleDeleteOrder", {
+        id: orderToDelete.maDonHang,
+      });
       toast.error(getUserMessage(err));
     }
   };
 
   // Admin edit status control
   const [editConfirmOpen, setEditConfirmOpen] = useState(false);
-  const [statusToEdit, setStatusToEdit] = useState<TrangThaiDonHang | null>(null);
+  const [statusToEdit, setStatusToEdit] = useState<TrangThaiDonHang | null>(
+    null,
+  );
 
   const confirmAdminEditStatus = async () => {
     if (!selected || !statusToEdit) return;
@@ -254,14 +341,15 @@ export default function DonHangPage() {
   };
 
   const formatDate = (timestamp: any) => {
-    if (!timestamp?.toDate) return '-';
-    return format(timestamp.toDate(), 'dd/MM/yyyy HH:mm', { locale: vi });
+    if (!timestamp?.toDate) return "-";
+    return format(timestamp.toDate(), "dd/MM/yyyy HH:mm", { locale: vi });
   };
 
   const statusSteps = [
-    TrangThaiDonHang.CHO_XU_LY, TrangThaiDonHang.DANG_GIAT,
-    TrangThaiDonHang.DANG_SAY, TrangThaiDonHang.DANG_UI,
-    TrangThaiDonHang.HOAN_THANH, TrangThaiDonHang.DA_GIAO,
+    TrangThaiDonHang.CHO_XU_LY,
+    TrangThaiDonHang.DANG_XU_LY,
+    TrangThaiDonHang.HOAN_THANH,
+    TrangThaiDonHang.DA_GIAO,
   ];
 
   const getActiveStep = (status: TrangThaiDonHang) => {
@@ -272,157 +360,425 @@ export default function DonHangPage() {
   const handlePrint = async (donHangToPrint?: DonHang) => {
     const targetOrder = donHangToPrint || selected;
     if (!targetOrder) return;
-    const maCuaHang = userProfile?.maCuaHang || '';
+    const maCuaHang = userProfile?.maCuaHang || "";
     try {
-      const jobId = await printService.requestPrint(maCuaHang, targetOrder.maDonHang, userProfile?.hoTen || 'NV', 'IN_LAI');
-      toast.loading('🖨 Đang gửi lệnh in lại...', { id: `print-${jobId}` });
+      const jobId = await printService.requestPrint(
+        maCuaHang,
+        targetOrder.maDonHang,
+        userProfile?.hoTen || "NV",
+        "IN_LAI",
+      );
+      toast.loading("🖨 Đang gửi lệnh in lại...", { id: `print-${jobId}` });
 
       // Listen for realtime print status from print-server
-      const unsubscribe = printService.listenForPrintStatus(jobId, (status, errorMsg) => {
-        if (status === 'PRINTING') {
-          toast.loading('🖨 Đang in...', { id: `print-${jobId}` });
-        } else if (status === 'SUCCESS') {
-          toast.success(`✅ In lại thành công đơn ${targetOrder.maDonHang}`, { id: `print-${jobId}` });
-          unsubscribe();
-        } else if (status === 'FAILED') {
-          toast.error(`❌ Lỗi in: ${errorMsg || 'Không xác định'}`, { id: `print-${jobId}`, duration: 5000 });
-          unsubscribe();
-        }
-      });
+      const unsubscribe = printService.listenForPrintStatus(
+        jobId,
+        (status, errorMsg) => {
+          if (status === "PRINTING") {
+            toast.loading("🖨 Đang in...", { id: `print-${jobId}` });
+          } else if (status === "SUCCESS") {
+            toast.success(`✅ In lại thành công đơn ${targetOrder.maDonHang}`, {
+              id: `print-${jobId}`,
+            });
+            unsubscribe();
+          } else if (status === "FAILED") {
+            toast.error(`❌ Lỗi in: ${errorMsg || "Không xác định"}`, {
+              id: `print-${jobId}`,
+              duration: 5000,
+            });
+            unsubscribe();
+          }
+        },
+      );
       setTimeout(() => unsubscribe(), 30000);
     } catch (err) {
-      toast.error('Lỗi khi gửi lệnh in');
+      toast.error("Lỗi khi gửi lệnh in");
     }
   };
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h5" fontWeight={700}>Quản lý đơn hàng</Typography>
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          mb: 3,
+        }}
+      >
+        <Typography variant="h5" fontWeight={700}>
+          Quản lý đơn hàng
+        </Typography>
       </Box>
 
       {/* Filters: #25 (phone/code search), #26 (status filter) */}
-      <Box sx={{
-        display: 'grid',
-        gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: 'auto auto auto auto' },
-        gap: 2,
-        mb: 3
-      }}>
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns: {
+            xs: "1fr",
+            sm: "1fr 1fr",
+            md: "auto auto auto auto",
+          },
+          gap: 2,
+          mb: 3,
+        }}
+      >
         <TextField
-          size="small" placeholder="Tìm mã đơn, SĐT..."
+          size="small"
+          placeholder="Tìm mã đơn, SĐT..."
           value={searchPhone}
           onChange={(e) => setSearchPhone(e.target.value)}
-          InputProps={{ startAdornment: <InputAdornment position="start"><Search fontSize="small" /></InputAdornment> }}
-          sx={{ minWidth: { xs: '100%', md: 220 } }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <Search fontSize="small" />
+              </InputAdornment>
+            ),
+          }}
+          sx={{ minWidth: { xs: "100%", md: 220 } }}
         />
-        <FormControl size="small" sx={{ minWidth: { xs: '100%', md: 180 } }}>
+        <FormControl size="small" sx={{ minWidth: { xs: "100%", md: 180 } }}>
           <InputLabel>Lọc trạng thái</InputLabel>
-          <Select value={filterStatus} label="Lọc trạng thái" onChange={(e) => setFilterStatus(e.target.value as any)}>
+          <Select
+            value={filterStatus}
+            label="Lọc trạng thái"
+            onChange={(e) => setFilterStatus(e.target.value as any)}
+          >
             <MenuItem value="">Tất cả</MenuItem>
             {Object.entries(TRANG_THAI_LABELS).map(([k, v]) => (
-              <MenuItem key={k} value={k}>{v}</MenuItem>
+              <MenuItem key={k} value={k}>
+                {v}
+              </MenuItem>
             ))}
           </Select>
         </FormControl>
         <TextField
-          size="small" type="date" label="Từ ngày" value={filterDateFrom}
+          size="small"
+          type="date"
+          label="Từ ngày"
+          value={filterDateFrom}
           onChange={(e) => setFilterDateFrom(e.target.value)}
-          InputLabelProps={{ shrink: true }} sx={{ width: { xs: '100%', md: 160 } }}
+          InputLabelProps={{ shrink: true }}
+          sx={{ width: { xs: "100%", md: 160 } }}
         />
         <TextField
-          size="small" type="date" label="Đến ngày" value={filterDateTo}
+          size="small"
+          type="date"
+          label="Đến ngày"
+          value={filterDateTo}
           onChange={(e) => setFilterDateTo(e.target.value)}
-          InputLabelProps={{ shrink: true }} sx={{ width: { xs: '100%', md: 160 } }}
+          InputLabelProps={{ shrink: true }}
+          sx={{ width: { xs: "100%", md: 160 } }}
         />
       </Box>
 
       {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
+        <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
+          <CircularProgress />
+        </Box>
       ) : (
-        <TableContainer component={Paper} sx={{ borderRadius: 3, overflowX: 'auto' }}>
-          <Table sx={{ minWidth: 600 }}>
-            <TableHead>
-              <TableRow sx={{ bgcolor: 'grey.50' }}>
-                <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
-                  <TableSortLabel active={orderBy === 'maDonHang'} direction={orderBy === 'maDonHang' ? orderDirection : 'asc'} onClick={() => handleRequestSort('maDonHang')}>Mã đơn</TableSortLabel>
-                </TableCell>
-                <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
-                  <TableSortLabel active={orderBy === 'khachHang'} direction={orderBy === 'khachHang' ? orderDirection : 'asc'} onClick={() => handleRequestSort('khachHang')}>Khách hàng</TableSortLabel>
-                </TableCell>
-                <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap', display: { xs: 'none', md: 'table-cell' } }}>
-                  <TableSortLabel active={orderBy === 'ngayHenTra'} direction={orderBy === 'ngayHenTra' ? orderDirection : 'asc'} onClick={() => handleRequestSort('ngayHenTra')}>Hẹn trả</TableSortLabel>
-                </TableCell>
-                <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap', display: { xs: 'none', sm: 'table-cell' } }}>
-                  <TableSortLabel active={orderBy === 'tongTien'} direction={orderBy === 'tongTien' ? orderDirection : 'asc'} onClick={() => handleRequestSort('tongTien')}>Tổng tiền</TableSortLabel>
-                </TableCell>
-                <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap', display: { xs: 'none', sm: 'table-cell' } }}>
-                  <TableSortLabel active={orderBy === 'tienDaTra'} direction={orderBy === 'tienDaTra' ? orderDirection : 'asc'} onClick={() => handleRequestSort('tienDaTra')}>Đã trả</TableSortLabel>
-                </TableCell>
-                <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap', display: { xs: 'none', md: 'table-cell' } }}>
-                  <TableSortLabel active={orderBy === 'maNhanVien'} direction={orderBy === 'maNhanVien' ? orderDirection : 'asc'} onClick={() => handleRequestSort('maNhanVien')}>Nhân viên</TableSortLabel>
-                </TableCell>
-                <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Trạng thái</TableCell>
-                <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Thao tác</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {sortedOrders.length === 0 ? (
-                <TableRow><TableCell colSpan={8} align="center" sx={{ py: 4 }}>Chưa có đơn hàng nào</TableCell></TableRow>
-              ) : sortedOrders.map((dh) => (
-                <TableRow key={dh.maDonHang} hover>
-                  <TableCell sx={{ fontWeight: 600, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
-                    {dh.maDonHang}
-                    {/* #29: Badge "Chưa xác định dịch vụ" for mode 2 orders */}
-                    {!dh.daXacDinhDichVu && (
-                      <Chip label="Chưa XĐ DV" size="small" color="warning" variant="outlined"
-                        icon={<Warning sx={{ fontSize: '14px !important' }} />}
-                        sx={{ ml: 1, height: 22, fontSize: '0.65rem' }} />
-                    )}
+        <>
+          {hasMore && orderBy !== "ngayTao" && (
+            <Typography
+              variant="caption"
+              color="warning.main"
+              sx={{ display: "block", mb: 1 }}
+            >
+              Lưu ý: Sắp xếp chỉ áp dụng cho trang hiện tại
+            </Typography>
+          )}
+          <TableContainer
+            component={Paper}
+            sx={{ borderRadius: 3, overflowX: "auto" }}
+          >
+            <Table sx={{ minWidth: 600 }}>
+              <TableHead>
+                <TableRow sx={{ bgcolor: "grey.50" }}>
+                  <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
+                    <TableSortLabel
+                      active={orderBy === "maDonHang"}
+                      direction={
+                        orderBy === "maDonHang" ? orderDirection : "asc"
+                      }
+                      onClick={() => handleRequestSort("maDonHang")}
+                    >
+                      Mã đơn
+                    </TableSortLabel>
                   </TableCell>
-                  <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                    {customerMap[dh.maKhachHang] ? (
-                      <Box>
-                        <Typography variant="body2" fontWeight={600} noWrap>{customerMap[dh.maKhachHang].hoTen}</Typography>
-                        <Typography variant="caption" color="text.secondary">{customerMap[dh.maKhachHang].soDienThoai}</Typography>
-                      </Box>
-                    ) : (
-                      <Typography variant="body2" color="text.secondary">-</Typography>
-                    )}
+                  <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
+                    <TableSortLabel
+                      active={orderBy === "khachHang"}
+                      direction={
+                        orderBy === "khachHang" ? orderDirection : "asc"
+                      }
+                      onClick={() => handleRequestSort("khachHang")}
+                    >
+                      Khách hàng
+                    </TableSortLabel>
                   </TableCell>
-                  <TableCell sx={{ whiteSpace: 'nowrap', display: { xs: 'none', md: 'table-cell' } }}>{formatDate(dh.ngayHenTra)}</TableCell>
-                  <TableCell sx={{ whiteSpace: 'nowrap', display: { xs: 'none', sm: 'table-cell' } }}>{dh.tongTien > 0 ? formatCurrency(dh.tongTien) : <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>Chưa XĐ</Typography>}</TableCell>
-                  <TableCell sx={{ whiteSpace: 'nowrap', display: { xs: 'none', sm: 'table-cell' } }}>{formatCurrency(dh.tienDaTra)}</TableCell>
-                  <TableCell sx={{ whiteSpace: 'nowrap', display: { xs: 'none', md: 'table-cell' }, fontSize: '0.85rem' }}>{employeeMap[dh.maNhanVien] || '-'}</TableCell>
-                  <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                    <Chip
-                      label={TRANG_THAI_LABELS[dh.trangThai]}
-                      size="small"
-                      sx={{ bgcolor: TRANG_THAI_COLORS[dh.trangThai], color: 'white', fontWeight: 600, minWidth: 90 }}
-                    />
+                  <TableCell
+                    sx={{
+                      fontWeight: 600,
+                      whiteSpace: "nowrap",
+                      display: { xs: "none", md: "table-cell" },
+                    }}
+                  >
+                    <TableSortLabel
+                      active={orderBy === "ngayTao"}
+                      direction={orderBy === "ngayTao" ? orderDirection : "asc"}
+                      onClick={() => handleRequestSort("ngayTao")}
+                    >
+                      Ngày tạo
+                    </TableSortLabel>
                   </TableCell>
-                  <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                    <IconButton size="small" color="primary" title="Chi tiết" onClick={() => { setSelected(dh); setDetailOpen(true); }}>
-                      <Visibility fontSize="small" />
-                    </IconButton>
-                    <IconButton size="small" color="secondary" title="In phiếu" onClick={() => { handlePrint(dh); }}>
-                      <Print fontSize="small" />
-                    </IconButton>
-                    {(vaiTro === VaiTro.ADMIN || vaiTro === VaiTro.SUPER_ADMIN) && (
-                      <IconButton size="small" color="error" title="Xóa đơn" onClick={() => { setOrderToDelete(dh); setDeleteConfirmOpen(true); }}>
-                        <Delete fontSize="small" />
-                      </IconButton>
-                    )}
+                  <TableCell
+                    sx={{
+                      fontWeight: 600,
+                      whiteSpace: "nowrap",
+                      display: { xs: "none", md: "table-cell" },
+                    }}
+                  >
+                    <TableSortLabel
+                      active={orderBy === "ngayHenTra"}
+                      direction={
+                        orderBy === "ngayHenTra" ? orderDirection : "asc"
+                      }
+                      onClick={() => handleRequestSort("ngayHenTra")}
+                    >
+                      Hẹn trả
+                    </TableSortLabel>
+                  </TableCell>
+                  <TableCell
+                    sx={{
+                      fontWeight: 600,
+                      whiteSpace: "nowrap",
+                      display: { xs: "none", sm: "table-cell" },
+                    }}
+                  >
+                    <TableSortLabel
+                      active={orderBy === "tongTien"}
+                      direction={
+                        orderBy === "tongTien" ? orderDirection : "asc"
+                      }
+                      onClick={() => handleRequestSort("tongTien")}
+                    >
+                      Tổng tiền
+                    </TableSortLabel>
+                  </TableCell>
+                  <TableCell
+                    sx={{
+                      fontWeight: 600,
+                      whiteSpace: "nowrap",
+                      display: { xs: "none", sm: "table-cell" },
+                    }}
+                  >
+                    <TableSortLabel
+                      active={orderBy === "tienDaTra"}
+                      direction={
+                        orderBy === "tienDaTra" ? orderDirection : "asc"
+                      }
+                      onClick={() => handleRequestSort("tienDaTra")}
+                    >
+                      Đã trả
+                    </TableSortLabel>
+                  </TableCell>
+                  <TableCell
+                    sx={{
+                      fontWeight: 600,
+                      whiteSpace: "nowrap",
+                      display: { xs: "none", md: "table-cell" },
+                    }}
+                  >
+                    <TableSortLabel
+                      active={orderBy === "maNhanVien"}
+                      direction={
+                        orderBy === "maNhanVien" ? orderDirection : "asc"
+                      }
+                      onClick={() => handleRequestSort("maNhanVien")}
+                    >
+                      Nhân viên
+                    </TableSortLabel>
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
+                    Trạng thái
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
+                    Thao tác
                   </TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+              </TableHead>
+              <TableBody>
+                {sortedOrders.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
+                      Chưa có đơn hàng nào
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  sortedOrders.map((dh) => (
+                    <TableRow key={dh.maDonHang} hover>
+                      <TableCell
+                        sx={{
+                          fontWeight: 600,
+                          fontFamily: "monospace",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {dh.maDonHang}
+                        {/* #29: Badge "Chưa xác định dịch vụ" for mode 2 orders */}
+                        {!dh.daXacDinhDichVu && (
+                          <Chip
+                            label="Chưa XĐ DV"
+                            size="small"
+                            color="warning"
+                            variant="outlined"
+                            icon={
+                              <Warning sx={{ fontSize: "14px !important" }} />
+                            }
+                            sx={{ ml: 1, height: 22, fontSize: "0.65rem" }}
+                          />
+                        )}
+                      </TableCell>
+                      <TableCell sx={{ whiteSpace: "nowrap" }}>
+                        {customerMap[dh.maKhachHang] ? (
+                          <Box>
+                            <Typography variant="body2" fontWeight={600} noWrap>
+                              {customerMap[dh.maKhachHang].hoTen}
+                            </Typography>
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
+                              {customerMap[dh.maKhachHang].soDienThoai}
+                            </Typography>
+                          </Box>
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">
+                            -
+                          </Typography>
+                        )}
+                      </TableCell>
+                      <TableCell
+                        sx={{
+                          whiteSpace: "nowrap",
+                          display: { xs: "none", md: "table-cell" },
+                        }}
+                      >
+                        {formatDate(dh.ngayTao)}
+                      </TableCell>
+                      <TableCell
+                        sx={{
+                          whiteSpace: "nowrap",
+                          display: { xs: "none", md: "table-cell" },
+                        }}
+                      >
+                        {formatDate(dh.ngayHenTra)}
+                      </TableCell>
+                      <TableCell
+                        sx={{
+                          whiteSpace: "nowrap",
+                          display: { xs: "none", sm: "table-cell" },
+                        }}
+                      >
+                        {dh.tongTien > 0 ? (
+                          formatCurrency(dh.tongTien)
+                        ) : (
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            sx={{ fontStyle: "italic" }}
+                          >
+                            Chưa XĐ
+                          </Typography>
+                        )}
+                      </TableCell>
+                      <TableCell
+                        sx={{
+                          whiteSpace: "nowrap",
+                          display: { xs: "none", sm: "table-cell" },
+                        }}
+                      >
+                        {formatCurrency(dh.tienDaTra)}
+                      </TableCell>
+                      <TableCell
+                        sx={{
+                          whiteSpace: "nowrap",
+                          display: { xs: "none", md: "table-cell" },
+                          fontSize: "0.85rem",
+                        }}
+                      >
+                        {employeeMap[dh.maNhanVien] || "-"}
+                      </TableCell>
+                      <TableCell sx={{ whiteSpace: "nowrap" }}>
+                        <Chip
+                          label={TRANG_THAI_LABELS[dh.trangThai]}
+                          size="small"
+                          sx={{
+                            bgcolor: TRANG_THAI_COLORS[dh.trangThai],
+                            color: "white",
+                            fontWeight: 600,
+                            minWidth: 90,
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell sx={{ whiteSpace: "nowrap" }}>
+                        <IconButton
+                          size="small"
+                          color="primary"
+                          title="Chi tiết"
+                          onClick={() => {
+                            setSelected(dh);
+                            setDetailOpen(true);
+                          }}
+                        >
+                          <Visibility fontSize="small" />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          color="secondary"
+                          title="In phiếu"
+                          onClick={() => {
+                            handlePrint(dh);
+                          }}
+                        >
+                          <Print fontSize="small" />
+                        </IconButton>
+                        {(vaiTro === VaiTro.ADMIN ||
+                          vaiTro === VaiTro.SUPER_ADMIN) && (
+                          <IconButton
+                            size="small"
+                            color="error"
+                            title="Xóa đơn"
+                            onClick={() => {
+                              setOrderToDelete(dh);
+                              setDeleteConfirmOpen(true);
+                            }}
+                          >
+                            <Delete fontSize="small" />
+                          </IconButton>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </>
       )}
 
       {/* Yêu Cầu 11: Pagination Controls */}
       {!loading && (page > 0 || hasMore) && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 2, mt: 2 }}>
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            gap: 2,
+            mt: 2,
+          }}
+        >
           <Button
             size="small"
             startIcon={<NavigateBefore />}
@@ -445,19 +801,41 @@ export default function DonHangPage() {
         </Box>
       )}
       {/* Order Detail Dialog */}
-      <Dialog open={detailOpen} onClose={() => setDetailOpen(false)} maxWidth="md" fullWidth>
+      <Dialog
+        open={detailOpen}
+        onClose={() => setDetailOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
         {selected ? (
           <>
             <DialogTitle>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Typography variant="h6">Đơn hàng {selected.maDonHang}</Typography>
-                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <Typography variant="h6">
+                  Đơn hàng {selected.maDonHang}
+                </Typography>
+                <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
                   {!selected.daXacDinhDichVu && (
-                    <Chip label="Chưa xác định dịch vụ" color="warning" size="small" icon={<Warning />} />
+                    <Chip
+                      label="Chưa xác định dịch vụ"
+                      color="warning"
+                      size="small"
+                      icon={<Warning />}
+                    />
                   )}
                   <Chip
                     label={TRANG_THAI_LABELS[selected.trangThai]}
-                    sx={{ bgcolor: TRANG_THAI_COLORS[selected.trangThai], color: 'white', fontWeight: 600 }}
+                    sx={{
+                      bgcolor: TRANG_THAI_COLORS[selected.trangThai],
+                      color: "white",
+                      fontWeight: 600,
+                    }}
                   />
                 </Box>
               </Box>
@@ -466,21 +844,38 @@ export default function DonHangPage() {
               {/* Customer info */}
               {customerMap[selected.maKhachHang] ? (
                 <Typography variant="body2" sx={{ mb: 1 }}>
-                  👤 Khách hàng: <strong>{customerMap[selected.maKhachHang].hoTen}</strong> — {customerMap[selected.maKhachHang].soDienThoai}
+                  👤 Khách hàng:{" "}
+                  <strong>{customerMap[selected.maKhachHang].hoTen}</strong> —{" "}
+                  {customerMap[selected.maKhachHang].soDienThoai}
                 </Typography>
               ) : (
-                <Typography variant="body2" sx={{ mb: 1 }} color="text.secondary">
+                <Typography
+                  variant="body2"
+                  sx={{ mb: 1 }}
+                  color="text.secondary"
+                >
                   👤 Khách hàng: <em>{selected.maKhachHang}</em>
                 </Typography>
               )}
               {/* Employee info */}
               <Typography variant="body2" sx={{ mb: 2 }}>
-                💼 Nhân viên tiếp nhận: <strong>{employeeMap[selected.maNhanVien] || selected.maNhanVien || '-'}</strong>
+                💼 Nhân viên tiếp nhận:{" "}
+                <strong>
+                  {employeeMap[selected.maNhanVien] ||
+                    selected.maNhanVien ||
+                    "-"}
+                </strong>
               </Typography>
               {selected.trangThai !== TrangThaiDonHang.DA_HUY ? (
-                <Stepper activeStep={getActiveStep(selected.trangThai)} alternativeLabel sx={{ mb: 3 }}>
+                <Stepper
+                  activeStep={getActiveStep(selected.trangThai)}
+                  alternativeLabel
+                  sx={{ mb: 3 }}
+                >
                   {statusSteps.map((s) => (
-                    <Step key={s}><StepLabel>{TRANG_THAI_LABELS[s]}</StepLabel></Step>
+                    <Step key={s}>
+                      <StepLabel>{TRANG_THAI_LABELS[s]}</StepLabel>
+                    </Step>
                   ))}
                 </Stepper>
               ) : null}
@@ -488,8 +883,18 @@ export default function DonHangPage() {
               {/* Services table */}
               {selected.danhSachDichVu.length > 0 ? (
                 <>
-                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>Dịch vụ</Typography>
-                  <TableContainer component={Paper} variant="outlined" sx={{ mb: 2 }}>
+                  <Typography
+                    variant="subtitle2"
+                    color="text.secondary"
+                    gutterBottom
+                  >
+                    Dịch vụ
+                  </Typography>
+                  <TableContainer
+                    component={Paper}
+                    variant="outlined"
+                    sx={{ mb: 2 }}
+                  >
                     <Table size="small">
                       <TableHead>
                         <TableRow>
@@ -503,44 +908,111 @@ export default function DonHangPage() {
                         {selected.danhSachDichVu.map((dv, i) => (
                           <TableRow key={i}>
                             <TableCell>{dv.tenDichVu}</TableCell>
-                            <TableCell align="right">{dv.trongLuong > 0 ? `${dv.trongLuong} kg` : `${dv.soLuong}`}</TableCell>
-                            <TableCell align="right">{formatCurrency(dv.donGia)}</TableCell>
-                            <TableCell align="right">{formatCurrency(dv.thanhTien)}</TableCell>
+                            <TableCell align="right">
+                              {dv.trongLuong > 0
+                                ? `${dv.trongLuong} kg`
+                                : `${dv.soLuong}`}
+                            </TableCell>
+                            <TableCell align="right">
+                              {formatCurrency(dv.donGia)}
+                            </TableCell>
+                            <TableCell align="right">
+                              {formatCurrency(dv.thanhTien)}
+                            </TableCell>
                           </TableRow>
                         ))}
                         <TableRow>
-                          <TableCell colSpan={3} sx={{ fontWeight: 700 }}>Tổng tiền</TableCell>
-                          <TableCell align="right" sx={{ fontWeight: 700 }}>{formatCurrency(selected.tongTien)}</TableCell>
+                          <TableCell colSpan={3} sx={{ fontWeight: 700 }}>
+                            Tổng tiền
+                          </TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 700 }}>
+                            {formatCurrency(selected.tongTien)}
+                          </TableCell>
                         </TableRow>
                       </TableBody>
                     </Table>
                   </TableContainer>
                 </>
               ) : (
-                <Box sx={{ p: 3, textAlign: 'center', bgcolor: 'warning.50', borderRadius: 2, mb: 2, border: '1px dashed', borderColor: 'warning.main' }}>
+                <Box
+                  sx={{
+                    p: 3,
+                    textAlign: "center",
+                    bgcolor: "warning.50",
+                    borderRadius: 2,
+                    mb: 2,
+                    border: "1px dashed",
+                    borderColor: "warning.main",
+                  }}
+                >
                   <Warning color="warning" sx={{ fontSize: 40, mb: 1 }} />
-                  <Typography variant="subtitle1" fontWeight={600}>Chưa xác định dịch vụ</Typography>
-                  <Typography variant="body2" color="text.secondary">Dịch vụ và giá sẽ được xác định sau khi giặt</Typography>
+                  <Typography variant="subtitle1" fontWeight={600}>
+                    Chưa xác định dịch vụ
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Dịch vụ và giá sẽ được xác định sau khi giặt
+                  </Typography>
                 </Box>
               )}
 
-              <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
-                <Box><Typography variant="caption" color="text.secondary">Đã trả</Typography>
-                  <Typography fontWeight={600} color="success.main">{formatCurrency(selected.tienDaTra)}</Typography></Box>
-                <Box><Typography variant="caption" color="text.secondary">Còn lại</Typography>
-                  <Typography fontWeight={600} color="error.main">{formatCurrency(selected.tienConLai)}</Typography></Box>
+              <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Đã trả
+                  </Typography>
+                  <Typography fontWeight={600} color="success.main">
+                    {formatCurrency(selected.tienDaTra)}
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Còn lại
+                  </Typography>
+                  <Typography fontWeight={600} color="error.main">
+                    {formatCurrency(selected.tienConLai)}
+                  </Typography>
+                </Box>
               </Box>
 
               {/* Status History */}
               {selected.lichSuCapNhat?.length > 0 && (
                 <Box sx={{ mt: 2 }}>
-                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>Lịch sử trạng thái</Typography>
+                  <Typography
+                    variant="subtitle2"
+                    color="text.secondary"
+                    gutterBottom
+                  >
+                    Lịch sử trạng thái
+                  </Typography>
                   {selected.lichSuCapNhat.map((ls, i) => (
-                    <Box key={i} sx={{ display: 'flex', gap: 1, mb: 0.5, alignItems: 'center' }}>
-                      <Typography variant="caption" color="text.secondary">{formatDate(ls.thoiGian)}</Typography>
-                      <Chip label={TRANG_THAI_LABELS[ls.trangThaiCu]} size="small" sx={{ height: 20, fontSize: '0.6rem' }} />
+                    <Box
+                      key={i}
+                      sx={{
+                        display: "flex",
+                        gap: 1,
+                        mb: 0.5,
+                        alignItems: "center",
+                      }}
+                    >
+                      <Typography variant="caption" color="text.secondary">
+                        {formatDate(ls.thoiGian)}
+                      </Typography>
+                      <Chip
+                        label={TRANG_THAI_LABELS[ls.trangThaiCu]}
+                        size="small"
+                        sx={{ height: 20, fontSize: "0.6rem" }}
+                      />
                       <Typography variant="caption">→</Typography>
-                      <Chip label={TRANG_THAI_LABELS[ls.trangThaiMoi]} size="small" sx={{ height: 20, fontSize: '0.6rem', bgcolor: TRANG_THAI_COLORS[ls.trangThaiMoi], color: 'white' }} />
+                      <Chip
+                        label={TRANG_THAI_LABELS[ls.trangThaiMoi]}
+                        size="small"
+                        sx={{
+                          height: 20,
+                          fontSize: "0.6rem",
+                          bgcolor: TRANG_THAI_COLORS[ls.trangThaiMoi],
+                          color: "white",
+                        }}
+                      />
                     </Box>
                   ))}
                 </Box>
@@ -548,15 +1020,33 @@ export default function DonHangPage() {
 
               {/* Status update buttons */}
               {/* #1-4: Role-based status transitions */}
-              {vaiTro && getStatusTransitionsForRole(selected.trangThai, vaiTro).length > 0 ? (
+              {vaiTro &&
+              getStatusTransitionsForRole(selected.trangThai, vaiTro).length >
+                0 ? (
                 <Box sx={{ mt: 2 }}>
-                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>Cập nhật trạng thái</Typography>
-                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                    {getStatusTransitionsForRole(selected.trangThai, vaiTro).map((nextStatus) => (
+                  <Typography
+                    variant="subtitle2"
+                    color="text.secondary"
+                    gutterBottom
+                  >
+                    Cập nhật trạng thái
+                  </Typography>
+                  <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+                    {getStatusTransitionsForRole(
+                      selected.trangThai,
+                      vaiTro,
+                    ).map((nextStatus) => (
                       <Button
-                        key={nextStatus} variant="outlined" size="small"
-                        sx={{ borderColor: TRANG_THAI_COLORS[nextStatus], color: TRANG_THAI_COLORS[nextStatus] }}
-                        onClick={() => handleUpdateStatus(selected.maDonHang, nextStatus)}
+                        key={nextStatus}
+                        variant="outlined"
+                        size="small"
+                        sx={{
+                          borderColor: TRANG_THAI_COLORS[nextStatus],
+                          color: TRANG_THAI_COLORS[nextStatus],
+                        }}
+                        onClick={() =>
+                          handleUpdateStatus(selected.maDonHang, nextStatus)
+                        }
                       >
                         → {TRANG_THAI_LABELS[nextStatus]}
                       </Button>
@@ -567,25 +1057,51 @@ export default function DonHangPage() {
 
               {/* Admin Override: Allow changing to ANY status */}
               {(vaiTro === VaiTro.ADMIN || vaiTro === VaiTro.SUPER_ADMIN) && (
-                <Box sx={{ mt: 3, p: 2, bgcolor: 'error.50', borderRadius: 2, border: '1px dashed', borderColor: 'error.main' }}>
-                  <Typography variant="subtitle2" color="error.main" gutterBottom>⚠️ Sửa trạng thái bất kỳ (Admin)</Typography>
-                  <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                    <FormControl size="small" sx={{ minWidth: 200, bgcolor: 'white' }}>
+                <Box
+                  sx={{
+                    mt: 3,
+                    p: 2,
+                    bgcolor: "error.50",
+                    borderRadius: 2,
+                    border: "1px dashed",
+                    borderColor: "error.main",
+                  }}
+                >
+                  <Typography
+                    variant="subtitle2"
+                    color="error.main"
+                    gutterBottom
+                  >
+                    ⚠️ Sửa trạng thái bất kỳ (Admin)
+                  </Typography>
+                  <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
+                    <FormControl
+                      size="small"
+                      sx={{ minWidth: 200, bgcolor: "white" }}
+                    >
                       <InputLabel>Chọn trạng thái</InputLabel>
                       <Select
-                        value={statusToEdit || ''}
+                        value={statusToEdit || ""}
                         label="Chọn trạng thái"
-                        onChange={(e) => setStatusToEdit(e.target.value as TrangThaiDonHang)}
+                        onChange={(e) =>
+                          setStatusToEdit(e.target.value as TrangThaiDonHang)
+                        }
                       >
                         {Object.entries(TRANG_THAI_LABELS).map(([k, v]) => (
-                          <MenuItem key={k} value={k} disabled={k === selected.trangThai}>
+                          <MenuItem
+                            key={k}
+                            value={k}
+                            disabled={k === selected.trangThai}
+                          >
                             {v}
                           </MenuItem>
                         ))}
                       </Select>
                     </FormControl>
                     <Button
-                      variant="contained" color="error" size="small"
+                      variant="contained"
+                      color="error"
+                      size="small"
                       disabled={!statusToEdit}
                       onClick={() => setEditConfirmOpen(true)}
                     >
@@ -596,7 +1112,15 @@ export default function DonHangPage() {
               )}
             </DialogContent>
             <DialogActions>
-              <Button startIcon={<Print />} onClick={() => { handlePrint(); setDetailOpen(false); }}>In phiếu (Gửi đến máy in)</Button>
+              <Button
+                startIcon={<Print />}
+                onClick={() => {
+                  handlePrint();
+                  setDetailOpen(false);
+                }}
+              >
+                In phiếu (Gửi đến máy in)
+              </Button>
               <Button onClick={() => setDetailOpen(false)}>Đóng</Button>
             </DialogActions>
           </>
@@ -604,12 +1128,16 @@ export default function DonHangPage() {
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)}>
+      <Dialog
+        open={deleteConfirmOpen}
+        onClose={() => setDeleteConfirmOpen(false)}
+      >
         <DialogTitle>Xác nhận xóa đơn hàng</DialogTitle>
         <DialogContent>
           <Typography>
-            Bạn có chắc chắn muốn xóa đơn hàng <strong>{orderToDelete?.maDonHang}</strong> không?
-            Hành động này không thể hoàn tác.
+            Bạn có chắc chắn muốn xóa đơn hàng{" "}
+            <strong>{orderToDelete?.maDonHang}</strong> không? Hành động này
+            không thể hoàn tác.
           </Typography>
         </DialogContent>
         <DialogActions>
@@ -625,22 +1153,40 @@ export default function DonHangPage() {
         <DialogTitle>Xác nhận sửa trạng thái đơn hàng</DialogTitle>
         <DialogContent>
           <Typography>
-            Bạn đang thay đổi trạng thái đơn hàng <strong>{selected?.maDonHang}</strong> từ{' '}
-            <strong>{selected ? TRANG_THAI_LABELS[selected.trangThai] : ''}</strong> sang{' '}
-            <strong style={{ color: 'red' }}>{statusToEdit ? TRANG_THAI_LABELS[statusToEdit] : ''}</strong>.
+            Bạn đang thay đổi trạng thái đơn hàng{" "}
+            <strong>{selected?.maDonHang}</strong> từ{" "}
+            <strong>
+              {selected ? TRANG_THAI_LABELS[selected.trangThai] : ""}
+            </strong>{" "}
+            sang{" "}
+            <strong style={{ color: "red" }}>
+              {statusToEdit ? TRANG_THAI_LABELS[statusToEdit] : ""}
+            </strong>
+            .
           </Typography>
           <Typography sx={{ mt: 1 }} color="text.secondary" variant="body2">
-            Lưu ý: Hành động này dành cho Admin để sửa sai sót. Lịch sử trạng thái sẽ ghi nhận sự thay đổi này.
+            Lưu ý: Hành động này dành cho Admin để sửa sai sót. Lịch sử trạng
+            thái sẽ ghi nhận sự thay đổi này.
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => { setEditConfirmOpen(false); setStatusToEdit(null); }}>Hủy</Button>
-          <Button onClick={confirmAdminEditStatus} color="error" variant="contained">
+          <Button
+            onClick={() => {
+              setEditConfirmOpen(false);
+              setStatusToEdit(null);
+            }}
+          >
+            Hủy
+          </Button>
+          <Button
+            onClick={confirmAdminEditStatus}
+            color="error"
+            variant="contained"
+          >
             Đồng ý sửa
           </Button>
         </DialogActions>
       </Dialog>
-
     </Box>
   );
 }

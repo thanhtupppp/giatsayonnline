@@ -10,16 +10,17 @@ import {
   QueryConstraint,
   runTransaction,
   serverTimestamp,
+  Timestamp,
   type DocumentSnapshot,
   type QueryDocumentSnapshot,
-} from 'firebase/firestore';
-import { db } from '../config/firebase';
-import type { GiaoDich } from '../types';
-import { TrangThaiGiaoDich, PhuongThucThanhToan } from '../types';
+} from "firebase/firestore";
+import { db } from "../config/firebase";
+import type { GiaoDich } from "../types";
+import { TrangThaiGiaoDich, PhuongThucThanhToan } from "../types";
 
-import { donHangService } from './donHangService';
+import { donHangService } from "./donHangService";
 
-const COLLECTION = 'giaoDich';
+const COLLECTION = "giaoDich";
 const DEFAULT_PAGE_SIZE = 50;
 
 export interface PaginatedResult<T> {
@@ -39,20 +40,20 @@ export const giaoDichService = {
     phuongThucThanhToan: PhuongThucThanhToan;
     ghiChu?: string;
   }): Promise<string> {
-    if (data.soTien === 0) throw new Error('Số tiền phải khác 0');
+    if (data.soTien === 0) throw new Error("Số tiền phải khác 0");
 
     // Resolve maDonHang to actual Firestore doc ID
     const donHangDocId = await donHangService._resolveDocId(data.maDonHang);
 
     // Mượn reference trước khi transaction
     const giaoDichRef = doc(collection(db, COLLECTION));
-    const donHangRef = doc(db, 'donHang', donHangDocId);
-    const khachHangRef = doc(db, 'khachHang', data.maKhachHang);
+    const donHangRef = doc(db, "donHang", donHangDocId);
+    const khachHangRef = doc(db, "khachHang", data.maKhachHang);
 
     await runTransaction(db, async (transaction) => {
       // === ALL READS FIRST ===
       const donHangDoc = await transaction.get(donHangRef);
-      if (!donHangDoc.exists()) throw new Error('Đơn hàng không tồn tại');
+      if (!donHangDoc.exists()) throw new Error("Đơn hàng không tồn tại");
       const khachHangDoc = await transaction.get(khachHangRef);
 
       const currentDonHang = donHangDoc.data();
@@ -61,12 +62,12 @@ export const giaoDichService = {
       if (!isRefund) {
         // C2, C3: Kiểm tra tiền thanh toán không vượt quá tiền còn lại
         if (data.soTien > currentDonHang.tienConLai) {
-          throw new Error('Số tiền thanh toán vượt quá số tiền còn lại');
+          throw new Error("Số tiền thanh toán vượt quá số tiền còn lại");
         }
       } else {
         // Nếu là hoàn tiền, số tiền hoàn (absolute) không được vượt quá số tiền đã trả
         if (Math.abs(data.soTien) > currentDonHang.tienDaTra) {
-          throw new Error('Số tiền hoàn vượt quá số tiền khách đã trả');
+          throw new Error("Số tiền hoàn vượt quá số tiền khách đã trả");
         }
       }
 
@@ -85,13 +86,13 @@ export const giaoDichService = {
         if (khachHangDoc.exists()) {
           const khData = khachHangDoc.data();
           const p = Math.floor(currentDonHang.tongTien / 1000); // 1 điểm = 1,000đ
-          
+
           let newTier = khData.loaiKhachHang;
           const newSpend = khData.tongChiTieu + currentDonHang.tongTien;
-          
+
           // Nâng cấp hạng
-          if (newSpend >= 10000000) newTier = 'VIP';
-          else if (newSpend >= 5000000) newTier = 'THAN_THIET';
+          if (newSpend >= 10000000) newTier = "VIP";
+          else if (newSpend >= 5000000) newTier = "THAN_THIET";
 
           transaction.update(khachHangRef, {
             diemTichLuy: khData.diemTichLuy + p,
@@ -126,7 +127,7 @@ export const giaoDichService = {
   async getByDonHang(maDonHang: string): Promise<GiaoDich[]> {
     const q = query(
       collection(db, COLLECTION),
-      where('maDonHang', '==', maDonHang)
+      where("maDonHang", "==", maDonHang),
     );
     const snapshot = await getDocs(q);
     return snapshot.docs
@@ -138,11 +139,35 @@ export const giaoDichService = {
       });
   },
 
-  async getByMaCuaHang(maCuaHang: string, options?: { limitCount?: number }): Promise<GiaoDich[]> {
+  async getByMaCuaHang(
+    maCuaHang: string,
+    options?: { limitCount?: number },
+  ): Promise<GiaoDich[]> {
     const q = query(
       collection(db, COLLECTION),
-      where('maCuaHang', '==', maCuaHang),
-      limit(options?.limitCount || DEFAULT_PAGE_SIZE)
+      where("maCuaHang", "==", maCuaHang),
+      limit(options?.limitCount || DEFAULT_PAGE_SIZE),
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs
+      .map((d) => ({ ...d.data(), maGiaoDich: d.id }) as GiaoDich)
+      .sort((a, b) => {
+        const ta = a.ngayGiaoDich?.toDate?.() || new Date(0);
+        const tb = b.ngayGiaoDich?.toDate?.() || new Date(0);
+        return tb.getTime() - ta.getTime();
+      });
+  },
+
+  async getByDateRange(
+    maCuaHang: string,
+    from: Date,
+    to: Date,
+  ): Promise<GiaoDich[]> {
+    const q = query(
+      collection(db, COLLECTION),
+      where("maCuaHang", "==", maCuaHang),
+      where("ngayGiaoDich", ">=", Timestamp.fromDate(from)),
+      where("ngayGiaoDich", "<=", Timestamp.fromDate(to)),
     );
     const snapshot = await getDocs(q);
     return snapshot.docs
@@ -160,11 +185,14 @@ export const giaoDichService = {
     options?: {
       pageSize?: number;
       lastDoc?: DocumentSnapshot | null;
-    }
+    },
   ): Promise<PaginatedResult<GiaoDich>> {
-    const pageSize = Math.min(options?.pageSize || DEFAULT_PAGE_SIZE, DEFAULT_PAGE_SIZE);
+    const pageSize = Math.min(
+      options?.pageSize || DEFAULT_PAGE_SIZE,
+      DEFAULT_PAGE_SIZE,
+    );
     const constraints: QueryConstraint[] = [
-      where('maCuaHang', '==', maCuaHang),
+      where("maCuaHang", "==", maCuaHang),
     ];
     constraints.push(limit(pageSize + 1));
 
@@ -173,7 +201,8 @@ export const giaoDichService = {
     const hasMore = snapshot.docs.length > pageSize;
     const docs = hasMore ? snapshot.docs.slice(0, pageSize) : snapshot.docs;
     return {
-      data: docs.map((d) => ({ ...d.data(), maGiaoDich: d.id }) as GiaoDich)
+      data: docs
+        .map((d) => ({ ...d.data(), maGiaoDich: d.id }) as GiaoDich)
         .sort((a, b) => {
           const ta = a.ngayGiaoDich?.toDate?.() || new Date(0);
           const tb = b.ngayGiaoDich?.toDate?.() || new Date(0);

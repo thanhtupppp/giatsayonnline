@@ -1,9 +1,22 @@
-import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
-import { enableNetwork } from 'firebase/firestore';
-import { db } from '../config/firebase';
-import { logError } from '../utils/errorHandler';
-import { Alert, Snackbar, LinearProgress, Box, Typography } from '@mui/material';
-import WifiOffIcon from '@mui/icons-material/WifiOff';
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useRef,
+  useCallback,
+} from "react";
+import { enableNetwork } from "firebase/firestore";
+import { db } from "../config/firebase";
+import { logError } from "../utils/errorHandler";
+import {
+  Alert,
+  Snackbar,
+  LinearProgress,
+  Box,
+  Typography,
+} from "@mui/material";
+import WifiOffIcon from "@mui/icons-material/WifiOff";
 
 /**
  * Connection Monitor — Yêu Cầu 10, Criteria 4-6
@@ -18,7 +31,7 @@ interface ConnectionContextType {
   retryCount: number;
 }
 
-const ConnectionContext = createContext<ConnectionContextType>({
+export const ConnectionContext = createContext<ConnectionContextType>({
   isOnline: true,
   retryCount: 0,
 });
@@ -26,7 +39,11 @@ const ConnectionContext = createContext<ConnectionContextType>({
 const MAX_RETRIES = 3;
 const RETRY_INTERVAL_MS = 5000;
 
-export function ConnectionProvider({ children }: { children: React.ReactNode }) {
+export function ConnectionProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [retryCount, setRetryCount] = useState(0);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -45,11 +62,11 @@ export function ConnectionProvider({ children }: { children: React.ReactNode }) 
           setIsOnline(true);
           setRetryCount(0);
           isRetryingRef.current = false;
-          console.log('[Connection] Kết nối phục hồi thành công');
+          console.log("[Connection] Kết nối phục hồi thành công");
           return;
         }
       } catch (err) {
-        logError(err, 'ConnectionContext.attemptReconnect', { attempt });
+        logError(err, "ConnectionContext.attemptReconnect", { attempt });
       }
 
       if (attempt < MAX_RETRIES) {
@@ -61,32 +78,32 @@ export function ConnectionProvider({ children }: { children: React.ReactNode }) 
 
     isRetryingRef.current = false;
     setRetryCount(0);
-    console.warn('[Connection] Không thể kết nối lại sau 3 lần thử');
+    console.warn("[Connection] Không thể kết nối lại sau 3 lần thử");
   }, []);
 
   useEffect(() => {
     const handleOnline = () => {
-      console.log('[Connection] Trình duyệt online');
+      console.log("[Connection] Trình duyệt online");
       setIsOnline(true);
       setRetryCount(0);
       enableNetwork(db).catch((err) =>
-        logError(err, 'ConnectionContext.handleOnline')
+        logError(err, "ConnectionContext.handleOnline"),
       );
     };
 
     const handleOffline = () => {
-      console.warn('[Connection] Mất kết nối mạng');
+      console.warn("[Connection] Mất kết nối mạng");
       setIsOnline(false);
-      logError(new Error('Network offline'), 'ConnectionContext.handleOffline');
+      logError(new Error("Network offline"), "ConnectionContext.handleOffline");
       attemptReconnect();
     };
 
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
 
     return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
       if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
     };
   }, [attemptReconnect]);
@@ -98,15 +115,15 @@ export function ConnectionProvider({ children }: { children: React.ReactNode }) 
       {/* Offline Banner */}
       <Snackbar
         open={!isOnline}
-        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+        anchorOrigin={{ vertical: "top", horizontal: "center" }}
       >
         <Alert
           severity="warning"
           icon={<WifiOffIcon />}
           sx={{
-            width: '100%',
+            width: "100%",
             maxWidth: 600,
-            alignItems: 'center',
+            alignItems: "center",
           }}
         >
           <Box>
@@ -116,7 +133,7 @@ export function ConnectionProvider({ children }: { children: React.ReactNode }) 
             <Typography variant="caption" color="text.secondary">
               {retryCount > 0
                 ? `Đang thử kết nối lại... (lần ${retryCount}/${MAX_RETRIES})`
-                : 'Dữ liệu được lưu tạm. Hệ thống sẽ tự đồng bộ khi có kết nối.'}
+                : "Dữ liệu được lưu tạm. Hệ thống sẽ tự đồng bộ khi có kết nối."}
             </Typography>
             {retryCount > 0 && (
               <LinearProgress
@@ -129,8 +146,4 @@ export function ConnectionProvider({ children }: { children: React.ReactNode }) 
       </Snackbar>
     </ConnectionContext.Provider>
   );
-}
-
-export function useConnection() {
-  return useContext(ConnectionContext);
 }

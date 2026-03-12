@@ -1,4 +1,4 @@
-import { Timestamp } from 'firebase/firestore';
+import { Timestamp } from "firebase/firestore";
 
 // ===== CỬA HÀNG =====
 export interface CuaHang {
@@ -24,9 +24,9 @@ export interface CuaHang {
 }
 
 export enum TrangThaiCuaHang {
-  HOAT_DONG = 'HOAT_DONG',
-  TAM_NGUNG = 'TAM_NGUNG',
-  DONG_CUA = 'DONG_CUA',
+  HOAT_DONG = "HOAT_DONG",
+  TAM_NGUNG = "TAM_NGUNG",
+  DONG_CUA = "DONG_CUA",
 }
 
 // ===== CẤU HÌNH CỬA HÀNG =====
@@ -55,8 +55,8 @@ export interface CauHinhCuaHang {
 }
 
 export enum CheDoTaoDonHang {
-  CHON_DICH_VU_TRUOC = 'CHON_DICH_VU_TRUOC',
-  CHON_DICH_VU_SAU = 'CHON_DICH_VU_SAU',
+  CHON_DICH_VU_TRUOC = "CHON_DICH_VU_TRUOC",
+  CHON_DICH_VU_SAU = "CHON_DICH_VU_SAU",
 }
 
 // ===== NGƯỜI DÙNG =====
@@ -74,16 +74,16 @@ export interface User {
 }
 
 export enum VaiTro {
-  SUPER_ADMIN = 'SUPER_ADMIN',
-  ADMIN = 'ADMIN',
-  NHAN_VIEN_QUAY = 'NHAN_VIEN_QUAY',
-  KY_THUAT_VIEN = 'KY_THUAT_VIEN',
+  SUPER_ADMIN = "SUPER_ADMIN",
+  ADMIN = "ADMIN",
+  NHAN_VIEN_QUAY = "NHAN_VIEN_QUAY",
+  KY_THUAT_VIEN = "KY_THUAT_VIEN",
 }
 
 export enum TrangThaiNhanVien {
-  DANG_LAM_VIEC = 'DANG_LAM_VIEC',
-  NGHI_PHEP = 'NGHI_PHEP',
-  DA_NGHI_VIEC = 'DA_NGHI_VIEC',
+  DANG_LAM_VIEC = "DANG_LAM_VIEC",
+  NGHI_PHEP = "NGHI_PHEP",
+  DA_NGHI_VIEC = "DA_NGHI_VIEC",
 }
 
 export interface CustomClaims {
@@ -113,14 +113,12 @@ export interface DonHang {
 }
 
 export enum TrangThaiDonHang {
-  CHO_XU_LY = 'CHO_XU_LY',
-  CHO_CAN_KY = 'CHO_CAN_KY',
-  DANG_GIAT = 'DANG_GIAT',
-  DANG_SAY = 'DANG_SAY',
-  DANG_UI = 'DANG_UI',
-  HOAN_THANH = 'HOAN_THANH',
-  DA_GIAO = 'DA_GIAO',
-  DA_HUY = 'DA_HUY',
+  CHO_XU_LY = "CHO_XU_LY",
+  CHO_CAN_KY = "CHO_CAN_KY",
+  DANG_XU_LY = "DANG_XU_LY",
+  HOAN_THANH = "HOAN_THANH",
+  DA_GIAO = "DA_GIAO",
+  DA_HUY = "DA_HUY",
 }
 
 export interface ChiTietDichVu {
@@ -159,9 +157,9 @@ export interface KhachHang {
 }
 
 export enum LoaiKhachHang {
-  THUONG = 'THUONG',
-  THAN_THIET = 'THAN_THIET',
-  VIP = 'VIP',
+  THUONG = "THUONG",
+  THAN_THIET = "THAN_THIET",
+  VIP = "VIP",
 }
 
 // ===== DỊCH VỤ =====
@@ -179,9 +177,9 @@ export interface DichVu {
 }
 
 export enum LoaiTinhGia {
-  THEO_TRONG_LUONG = 'THEO_TRONG_LUONG',
-  THEO_SO_LUONG = 'THEO_SO_LUONG',
-  CO_DINH = 'CO_DINH',
+  THEO_TRONG_LUONG = "THEO_TRONG_LUONG",
+  THEO_SO_LUONG = "THEO_SO_LUONG",
+  CO_DINH = "CO_DINH",
 }
 
 // ===== GIAO DỊCH =====
@@ -199,17 +197,17 @@ export interface GiaoDich {
 }
 
 export enum PhuongThucThanhToan {
-  TIEN_MAT = 'TIEN_MAT',
-  CHUYEN_KHOAN = 'CHUYEN_KHOAN',
-  THE_ATM = 'THE_ATM',
-  VI_DIEN_TU = 'VI_DIEN_TU',
+  TIEN_MAT = "TIEN_MAT",
+  CHUYEN_KHOAN = "CHUYEN_KHOAN",
+  THE_ATM = "THE_ATM",
+  VI_DIEN_TU = "VI_DIEN_TU",
 }
 
 export enum TrangThaiGiaoDich {
-  CHO_XAC_NHAN = 'CHO_XAC_NHAN',
-  THANH_CONG = 'THANH_CONG',
-  THAT_BAI = 'THAT_BAI',
-  DA_HOAN = 'DA_HOAN',
+  CHO_XAC_NHAN = "CHO_XAC_NHAN",
+  THANH_CONG = "THANH_CONG",
+  THAT_BAI = "THAT_BAI",
+  DA_HOAN = "DA_HOAN",
 }
 
 // ===== BÁO CÁO =====

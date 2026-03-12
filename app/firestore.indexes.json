@@ -63,11 +63,27 @@
       ]
     },
     {
+      "collectionGroup": "giaoDich",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "maCuaHang", "order": "ASCENDING" },
+        { "fieldPath": "ngayGiaoDich", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "donHang",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "maCuaHang", "order": "ASCENDING" },
         { "fieldPath": "ngayTao", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "donHang",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "maCuaHang", "order": "ASCENDING" },
+        { "fieldPath": "ngayHenTra", "order": "ASCENDING" }
       ]
     },
     {
