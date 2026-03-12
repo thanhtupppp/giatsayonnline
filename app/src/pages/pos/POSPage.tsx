@@ -1009,7 +1009,7 @@ export default function POSPage() {
     setShowCustomerSuggestions(false);
     setLookupLoading(true);
     try {
-      const orders = await donHangService.getByKhachHang(kh.maKhachHang);
+      const orders = await donHangService.getByKhachHang(maCuaHang, kh.maKhachHang);
       // Filter: only show orders NOT yet returned (DA_GIAO) and NOT cancelled (DA_HUY)
       const pending = orders.filter(
         (o) =>

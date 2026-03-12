@@ -65,10 +65,11 @@ export function logError(
   };
 
   // Structured console log for admin inspection
-  console.error(`[ERROR] [${entry.context}]`, {
-    ...entry,
-    raw: error,
-  });
+  if (error instanceof Error) {
+    console.error(`[ERROR] [${entry.context}]`, entry.message, '\nStack:', entry.stack, '\nRaw:', error);
+  } else {
+    console.error(`[ERROR] [${entry.context}] log entry:`, entry, '\nRaw error:', error);
+  }
 
   // Keep in-memory log (capped)
   errorLogs.push(entry);

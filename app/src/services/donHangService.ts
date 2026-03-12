@@ -1,7 +1,7 @@
 import {
   collection,
   doc,
-  addDoc,
+  setDoc,
   getDoc,
   getDocs,
   updateDoc,
@@ -25,6 +25,32 @@ import { format } from "date-fns";
 import { khachHangService } from "./khachHangService";
 import { auditLogService } from "./auditLogService";
 
+// Helper để dọn dẹp data trước khi gửi lên Firestore, loại bỏ undefined hoặc NaN gây lỗi
+function cleanFirestoreData<T>(obj: T): T {
+  if (obj === null || obj === undefined) return obj;
+  if (Array.isArray(obj)) {
+    return obj.map(cleanFirestoreData) as unknown as T;
+  }
+  if (typeof obj === 'object') {
+    if (obj instanceof Date || obj instanceof Timestamp) return obj;
+    const cleaned = {} as any;
+    for (const key in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        const value = (obj as any)[key];
+        if (value !== undefined) {
+          if (typeof value === 'number' && Number.isNaN(value)) {
+            cleaned[key] = 0; // Replace NaN with 0
+          } else {
+            cleaned[key] = cleanFirestoreData(value);
+          }
+        }
+      }
+    }
+    return cleaned as T;
+  }
+  return obj;
+}
+
 const COLLECTION = "donHang";
 const DEFAULT_PAGE_SIZE = 50;
 
@@ -34,22 +60,28 @@ export interface PaginatedResult<T> {
   hasMore: boolean;
 }
 
-async function generateMaDonHang(): Promise<string> {
+async function generateMaDonHang(maCuaHang: string): Promise<string> {
   const today = format(new Date(), "yyyyMMdd");
   const prefix = `${today}`;
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
   const q = query(
     collection(db, COLLECTION),
-    where("maDonHang", ">=", prefix),
-    where("maDonHang", "<=", prefix + "\uf8ff"),
-    orderBy("maDonHang", "desc"),
+    where("maCuaHang", "==", maCuaHang),
+    where("ngayTao", ">=", Timestamp.fromDate(todayStart)),
+    orderBy("ngayTao", "desc"),
     limit(1),
   );
   const snapshot = await getDocs(q);
   let nextNum = 1;
   if (!snapshot.empty) {
     const lastCode = snapshot.docs[0].data().maDonHang as string;
-    const lastNum = parseInt(lastCode.slice(-4), 10);
-    nextNum = lastNum + 1;
+    const seqStr = lastCode.substring(8, 12);
+    const lastNum = parseInt(seqStr, 10);
+    if (!isNaN(lastNum)) {
+      nextNum = lastNum + 1;
+    }
   }
   const randomSuffix = Math.random().toString(36).slice(2, 4).toUpperCase();
   return `${prefix}${String(nextNum).padStart(4, "0")}${randomSuffix}`;
@@ -58,20 +90,11 @@ async function generateMaDonHang(): Promise<string> {
 export const donHangService = {
   // Helper: resolve maDonHang to Firestore document ID
   async _resolveDocId(idOrMaDonHang: string): Promise<string> {
-    // Prefer maDonHang lookup to avoid an extra read when callers pass maDonHang
-    const q = query(
-      collection(db, COLLECTION),
-      where("maDonHang", "==", idOrMaDonHang),
-      limit(1),
-    );
-    const snapshot = await getDocs(q);
-    if (!snapshot.empty) return snapshot.docs[0].id;
-
-    // Fallback: treat as document ID
     const docSnap = await getDoc(doc(db, COLLECTION, idOrMaDonHang));
-    if (docSnap.exists()) return idOrMaDonHang;
-
-    throw new Error("Đơn hàng không tồn tại");
+    if (!docSnap.exists()) {
+      throw new Error("Đơn hàng không tồn tại");
+    }
+    return idOrMaDonHang;
   },
 
   async create(data: {
@@ -83,7 +106,7 @@ export const donHangService = {
     cheDoTaoDonHang: CheDoTaoDonHang;
     thoiGianXuLyMax?: number;
   }): Promise<string> {
-    const maDonHang = await generateMaDonHang();
+    const maDonHang = await generateMaDonHang(data.maCuaHang);
     const tongTien = data.danhSachDichVu.reduce(
       (sum, dv) => sum + dv.thanhTien,
       0,
@@ -103,9 +126,9 @@ export const donHangService = {
 
     const donHang: Omit<DonHang, "maDonHang"> & { maDonHang: string } = {
       maDonHang,
-      maCuaHang: data.maCuaHang,
-      maKhachHang: data.maKhachHang,
-      maNhanVien: data.maNhanVien,
+      maCuaHang: data.maCuaHang || "",
+      maKhachHang: data.maKhachHang || "",
+      maNhanVien: data.maNhanVien || "",
       ngayTao,
       ngayHenTra,
       trangThai:
@@ -124,10 +147,11 @@ export const donHangService = {
         data.cheDoTaoDonHang === CheDoTaoDonHang.CHON_DICH_VU_TRUOC,
     };
 
-    const docRef = await addDoc(collection(db, COLLECTION), donHang);
+    const cleanedDonHang = cleanFirestoreData(donHang);
+    await setDoc(doc(db, COLLECTION, maDonHang), cleanedDonHang);
 
     // YC 18, TC 1: Audit log for order creation
-    auditLogService.log({
+    auditLogService.log(cleanFirestoreData({
       maCuaHang: data.maCuaHang,
       userId: data.maNhanVien,
       action: "donhang.create",
@@ -137,35 +161,21 @@ export const donHangService = {
         maKhachHang: data.maKhachHang,
         cheDoTaoDonHang: data.cheDoTaoDonHang,
       },
-    });
+    }));
 
-    return docRef.id;
+    return maDonHang;
   },
 
   async getById(id: string): Promise<DonHang | null> {
-    // Try by doc ID first
     const docSnap = await getDoc(doc(db, COLLECTION, id));
     if (docSnap.exists()) return docSnap.data() as DonHang;
-    // Fallback: query by maDonHang field
-    const q = query(
-      collection(db, COLLECTION),
-      where("maDonHang", "==", id),
-      limit(1),
-    );
-    const snapshot = await getDocs(q);
-    if (snapshot.empty) return null;
-    return snapshot.docs[0].data() as DonHang;
+    return null;
   },
 
   async getByMaDonHang(maDonHang: string): Promise<DonHang | null> {
-    const q = query(
-      collection(db, COLLECTION),
-      where("maDonHang", "==", maDonHang),
-      limit(1),
-    );
-    const snapshot = await getDocs(q);
-    if (snapshot.empty) return null;
-    return snapshot.docs[0].data() as DonHang;
+    const docSnap = await getDoc(doc(db, COLLECTION, maDonHang));
+    if (docSnap.exists()) return docSnap.data() as DonHang;
+    return null;
   },
 
   async getByMaCuaHang(
@@ -263,9 +273,10 @@ export const donHangService = {
     };
   },
 
-  async getByKhachHang(maKhachHang: string): Promise<DonHang[]> {
+  async getByKhachHang(maCuaHang: string, maKhachHang: string): Promise<DonHang[]> {
     const q = query(
       collection(db, COLLECTION),
+      where("maCuaHang", "==", maCuaHang),
       where("maKhachHang", "==", maKhachHang),
       orderBy("ngayTao", "desc"),
     );

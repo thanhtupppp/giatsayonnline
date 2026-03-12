@@ -164,7 +164,7 @@ export default function KhachHangPage() {
     setHistoryLoading(true);
     try {
       // #5: Fetch transaction history
-      const orders = await donHangService.getByKhachHang(kh.maKhachHang);
+      const orders = await donHangService.getByKhachHang(maCuaHang, kh.maKhachHang);
       setHistoryOrders(orders);
     } catch {
       toast.error('Lỗi tải lịch sử giao dịch');

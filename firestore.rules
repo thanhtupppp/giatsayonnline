@@ -83,6 +83,12 @@ service cloud.firestore {
       allow create: if isSignedIn() && userStoreId() == request.resource.data.maCuaHang;
     }
 
+    // Print Jobs: allow read/write within same store
+    match /print_jobs/{jobId} {
+      allow read, write: if isSignedIn() && userStoreId() == resource.data.maCuaHang;
+      allow create: if isSignedIn() && userStoreId() == request.resource.data.maCuaHang;
+    }
+
     // Audit logs: allow read within same store, allow client create
     match /auditLog/{logId} {
       allow read: if isSignedIn() && userStoreId() == resource.data.maCuaHang;
