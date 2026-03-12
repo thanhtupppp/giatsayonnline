@@ -99,6 +99,7 @@ export interface DonHang {
   maNhanVien: string;
   ngayTao: Timestamp;
   ngayHenTra: Timestamp;
+  ngayGiao?: Timestamp;
   trangThai: TrangThaiDonHang;
   danhSachDichVu: ChiTietDichVu[];
   tongTrongLuong: number;

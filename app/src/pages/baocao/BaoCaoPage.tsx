@@ -230,7 +230,8 @@ export default function BaoCaoPage() {
   const { userProfile } = useAuth();
 
   // Data State
-  const [allDonHangs, setAllDonHangs] = useState<DonHang[]>([]);
+  const [donHangNhanVao, setDonHangNhanVao] = useState<DonHang[]>([]);
+  const [donHangDaGiao, setDonHangDaGiao] = useState<DonHang[]>([]);
   const [allKhachHangs, setAllKhachHangs] = useState<KhachHang[]>([]);
   const [allGiaoDichs, setAllGiaoDichs] = useState<GiaoDich[]>([]);
   const [allUsers, setAllUsers] = useState<User[]>([]);
@@ -298,12 +299,14 @@ export default function BaoCaoPage() {
       try {
         const from = startOfDay(new Date(tuNgay));
         const to = endOfDay(new Date(denNgay));
-        const [dh, gd, overdue] = await Promise.all([
+        const [dhNhanVao, dhDaGiao, gd, overdue] = await Promise.all([
           donHangService.getByDateRange(userProfile.maCuaHang, from, to),
+          donHangService.getByNgayGiao(userProfile.maCuaHang, from, to),
           giaoDichService.getByDateRange(userProfile.maCuaHang, from, to),
           donHangService.getOverdue(userProfile.maCuaHang),
         ]);
-        setAllDonHangs(dh);
+        setDonHangNhanVao(dhNhanVao);
+        setDonHangDaGiao(dhDaGiao);
         setAllGiaoDichs(gd);
         setOverdueOrders(overdue);
       } catch (err) {
@@ -327,6 +330,7 @@ export default function BaoCaoPage() {
   const filteredGiaoDichs = useMemo(
     () =>
       allGiaoDichs.filter((gd) => {
+        if (gd.trangThai !== TrangThaiGiaoDich.THANH_CONG) return false;
         const time = gd.ngayGiaoDich?.toMillis?.();
         if (!time) return false;
         return time >= startTimestamp && time <= endTimestamp;
@@ -334,55 +338,17 @@ export default function BaoCaoPage() {
     [allGiaoDichs, startTimestamp, endTimestamp],
   );
 
-  // allGiaoDichs đã fetch theo khoảng ngày, dùng để build map để giữ logic nhất quán theo range
-  const thanhToanCuoiMap = useMemo(() => {
-    const map = new Map<string, number>();
-    allGiaoDichs.forEach((gd) => {
-      if (gd.trangThai !== TrangThaiGiaoDich.THANH_CONG) return;
-      const time = gd.ngayGiaoDich?.toMillis?.();
-      if (!time) return;
-      const prev = map.get(gd.maDonHang);
-      if (!prev || time > prev) {
-        map.set(gd.maDonHang, time);
-      }
-    });
-    return map;
-  }, [allGiaoDichs]);
-
+  // Doanh thu theo ngày giao thực tế (PRD): chỉ tính đơn có ngayGiao trong khoảng
   const revenueOrders = useMemo(
     () =>
-      allDonHangs.filter((d) => {
-        if (d.tienConLai !== 0) return false;
-        const thoiGianThanhToan = thanhToanCuoiMap.get(d.maDonHang);
-        if (!thoiGianThanhToan) return false;
-        return (
-          thoiGianThanhToan >= startTimestamp &&
-          thoiGianThanhToan <= endTimestamp
-        );
-      }),
-    [allDonHangs, thanhToanCuoiMap, startTimestamp, endTimestamp],
+      donHangDaGiao.filter(
+        (d) => d.trangThai === TrangThaiDonHang.DA_GIAO && !!d.ngayGiao,
+      ),
+    [donHangDaGiao],
   );
 
-  const statusOrders = useMemo(
-    () =>
-      allDonHangs.filter((d) => {
-        const time = d.ngayTao?.toMillis?.();
-        if (!time) return false;
-        return time >= startTimestamp && time <= endTimestamp;
-      }),
-    [allDonHangs, startTimestamp, endTimestamp],
-  );
-
-  const timeTinhMap = useMemo(() => {
-    const map = new Map<string, number>();
-    allDonHangs.forEach((d) => {
-      if (d.tienConLai !== 0) return;
-      const thoiGianThanhToan = thanhToanCuoiMap.get(d.maDonHang);
-      if (!thoiGianThanhToan) return;
-      map.set(d.maDonHang, thoiGianThanhToan);
-    });
-    return map;
-  }, [allDonHangs, thanhToanCuoiMap]);
+  // Nhóm thống kê trạng thái đơn theo khoảng ngày nhận vào (ngayTao)
+  const statusOrders = useMemo(() => donHangNhanVao, [donHangNhanVao]);
 
   const filteredKhachHangs = useMemo(
     () =>
@@ -424,9 +390,6 @@ export default function BaoCaoPage() {
     const chuaTra = statusOrders.filter(
       (d) => d.trangThai === TrangThaiDonHang.HOAN_THANH,
     );
-    const daGiao = statusOrders.filter(
-      (d) => d.trangThai === TrangThaiDonHang.DA_GIAO,
-    );
     const dangGiat = statusOrders.filter(
       (d) => d.trangThai === TrangThaiDonHang.DANG_XU_LY,
     );
@@ -456,7 +419,7 @@ export default function BaoCaoPage() {
       completed: completed.length,
       chuaGiat: chuaGiat.length,
       chuaTra: chuaTra.length,
-      daGiao: daGiao.length,
+      daGiao: revenueOrders.length,
       dangGiat: dangGiat.length,
       daHuy: daHuy.length,
       revenue,
@@ -517,7 +480,7 @@ export default function BaoCaoPage() {
           ? new Date(startOfDay(intervals[idx + 1]).getTime() - 1)
           : endOfDay(to);
       const ordersInRange = revenueOrders.filter((d) => {
-        const t = timeTinhMap.get(d.maDonHang);
+        const t = d.ngayGiao?.toMillis?.();
         return t ? t >= intStart.getTime() && t < intEnd.getTime() : false;
       });
       return {
@@ -526,7 +489,7 @@ export default function BaoCaoPage() {
         soDon: ordersInRange.length,
       };
     });
-  }, [revenueOrders, tuNgay, denNgay, timeTinhMap]);
+  }, [revenueOrders, tuNgay, denNgay]);
 
   // Per-employee stats
   const employeeStats = useMemo(() => {
@@ -534,23 +497,18 @@ export default function BaoCaoPage() {
       string,
       { soDon: number; doanhThu: number; hoanThanh: number }
     >();
-    statusOrders.forEach((d) => {
-      const key = d.maNhanVien;
-      if (!map.has(key)) map.set(key, { soDon: 0, doanhThu: 0, hoanThanh: 0 });
-      const entry = map.get(key)!;
-      entry.soDon += 1;
-    });
     revenueOrders.forEach((d) => {
       const key = d.maNhanVien;
       if (!map.has(key)) map.set(key, { soDon: 0, doanhThu: 0, hoanThanh: 0 });
       const entry = map.get(key)!;
       entry.doanhThu += d.tongTien;
+      entry.soDon += 1;
       entry.hoanThanh += 1;
     });
     return Array.from(map.entries())
       .map(([uid, data]) => ({ uid, name: userMap.get(uid) || uid, ...data }))
       .sort((a, b) => b.doanhThu - a.doanhThu);
-  }, [statusOrders, revenueOrders, userMap]);
+  }, [revenueOrders, userMap]);
 
   // Service stats
   const serviceData = useMemo(() => {
@@ -794,11 +752,11 @@ export default function BaoCaoPage() {
           <Grid container spacing={2} sx={{ mb: 3 }}>
             <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
               <StatCard
-                title="Doanh Thu Theo Thanh Toán"
+                title="Doanh thu (theo ngày giao)"
                 value={formatCurrency(stats.revenue)}
                 icon={<TrendingUp />}
                 color="#1565C0"
-                subtitle="Đơn đã thanh toán đủ"
+                subtitle="Tổng tiền đơn đã giao khách"
                 active={selectedCard === "revenue"}
                 onClick={() => toggleCard("revenue")}
               />
@@ -954,10 +912,11 @@ export default function BaoCaoPage() {
                   }
                 > = {
                   revenue: {
-                    title: "💰 Đơn đã thanh toán đủ trong kỳ",
+                    title: "💰 Đơn đã giao khách trong kỳ",
                     type: "order",
                     useRevenueOrders: true,
-                    filterOrders: (d) => d.tienConLai <= 0,
+                    filterOrders: (d) =>
+                      d.trangThai === TrangThaiDonHang.DA_GIAO,
                   },
                   actualRevenue: {
                     title: "💵 Thực thu từ giao dịch trong kỳ",
@@ -1085,7 +1044,12 @@ export default function BaoCaoPage() {
                               >
                                 <TableCell>Mã ĐH</TableCell>
                                 <TableCell>Khách hàng</TableCell>
-                                <TableCell>Ngày tạo</TableCell>
+                                <TableCell>
+                                  {selectedCard === "revenue" ||
+                                  selectedCard === "daGiao"
+                                    ? "Ngày giao"
+                                    : "Ngày tạo"}
+                                </TableCell>
                                 <TableCell>Trạng thái</TableCell>
                                 <TableCell>Nhân viên</TableCell>
                                 <TableCell>Hẹn trả</TableCell>
@@ -1116,9 +1080,14 @@ export default function BaoCaoPage() {
                                     </TableCell>
                                     <TableCell>
                                       {(() => {
-                                        const t = timeTinhMap.get(d.maDonHang);
-                                        return t
-                                          ? format(new Date(t), "dd/MM HH:mm")
+                                        const isNgayGiao =
+                                          selectedCard === "revenue" ||
+                                          selectedCard === "daGiao";
+                                        const ts = isNgayGiao
+                                          ? d.ngayGiao
+                                          : d.ngayTao;
+                                        return ts?.toDate
+                                          ? format(ts.toDate(), "dd/MM HH:mm")
                                           : "—";
                                       })()}
                                     </TableCell>
@@ -1751,14 +1720,17 @@ export default function BaoCaoPage() {
                       <TableCell>Ngày Lưu</TableCell>
                       <TableCell>Kỳ Báo Cáo</TableCell>
                       <TableCell align="right">
-                        Doanh Thu Theo Thanh Toán
+                        Doanh thu (theo ngày giao)
                       </TableCell>
                       <TableCell align="right">Số Đơn</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {lichSuBaoCao.map((bc) => {
-                      const dl = bc.duLieu as any;
+                      const dl = bc.duLieu as {
+                        tongDoanhThu?: number;
+                        tongDonHang?: number;
+                      };
                       return (
                         <TableRow key={bc.maBaoCao}>
                           <TableCell sx={{ fontWeight: 500 }}>
@@ -1775,10 +1747,10 @@ export default function BaoCaoPage() {
                             align="right"
                             sx={{ color: "primary.main", fontWeight: 600 }}
                           >
-                            {formatCurrency(dl.tongDoanhThu || 0)}
+                            {formatCurrency(dl.tongDoanhThu ?? 0)}
                           </TableCell>
                           <TableCell align="right">
-                            {dl.tongDonHang || 0}
+                            {dl.tongDonHang ?? 0}
                           </TableCell>
                         </TableRow>
                       );

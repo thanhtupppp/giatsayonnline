@@ -31,22 +31,18 @@ function cleanFirestoreData<T>(obj: T): T {
   if (Array.isArray(obj)) {
     return obj.map(cleanFirestoreData) as unknown as T;
   }
-  if (typeof obj === 'object') {
+  if (typeof obj === "object") {
     if (obj instanceof Date || obj instanceof Timestamp) return obj;
-    const cleaned = {} as any;
-    for (const key in obj) {
-      if (Object.prototype.hasOwnProperty.call(obj, key)) {
-        const value = (obj as any)[key];
-        if (value !== undefined) {
-          if (typeof value === 'number' && Number.isNaN(value)) {
-            cleaned[key] = 0; // Replace NaN with 0
-          } else {
-            cleaned[key] = cleanFirestoreData(value);
-          }
-        }
+    const cleaned: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+      if (value === undefined) continue;
+      if (typeof value === "number" && Number.isNaN(value)) {
+        cleaned[key] = 0; // Replace NaN with 0
+        continue;
       }
+      cleaned[key] = cleanFirestoreData(value);
     }
-    return cleaned as T;
+    return cleaned as unknown as T;
   }
   return obj;
 }
@@ -151,17 +147,19 @@ export const donHangService = {
     await setDoc(doc(db, COLLECTION, maDonHang), cleanedDonHang);
 
     // YC 18, TC 1: Audit log for order creation
-    auditLogService.log(cleanFirestoreData({
-      maCuaHang: data.maCuaHang,
-      userId: data.maNhanVien,
-      action: "donhang.create",
-      afterData: {
-        maDonHang,
-        tongTien,
-        maKhachHang: data.maKhachHang,
-        cheDoTaoDonHang: data.cheDoTaoDonHang,
-      },
-    }));
+    auditLogService.log(
+      cleanFirestoreData({
+        maCuaHang: data.maCuaHang,
+        userId: data.maNhanVien,
+        action: "donhang.create",
+        afterData: {
+          maDonHang,
+          tongTien,
+          maKhachHang: data.maKhachHang,
+          cheDoTaoDonHang: data.cheDoTaoDonHang,
+        },
+      }),
+    );
 
     return maDonHang;
   },
@@ -210,6 +208,23 @@ export const donHangService = {
       constraints.push(where("trangThai", "==", options.trangThai));
     }
     constraints.push(orderBy("ngayTao", "desc"));
+    const q = query(collection(db, COLLECTION), ...constraints);
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((d) => d.data() as DonHang);
+  },
+
+  async getByNgayGiao(
+    maCuaHang: string,
+    from: Date,
+    to: Date,
+  ): Promise<DonHang[]> {
+    // Note: requires composite index maCuaHang ASC + ngayGiao DESC
+    const constraints: QueryConstraint[] = [
+      where("maCuaHang", "==", maCuaHang),
+      where("ngayGiao", ">=", Timestamp.fromDate(from)),
+      where("ngayGiao", "<=", Timestamp.fromDate(to)),
+      orderBy("ngayGiao", "desc"),
+    ];
     const q = query(collection(db, COLLECTION), ...constraints);
     const snapshot = await getDocs(q);
     return snapshot.docs.map((d) => d.data() as DonHang);
@@ -273,7 +288,10 @@ export const donHangService = {
     };
   },
 
-  async getByKhachHang(maCuaHang: string, maKhachHang: string): Promise<DonHang[]> {
+  async getByKhachHang(
+    maCuaHang: string,
+    maKhachHang: string,
+  ): Promise<DonHang[]> {
     const q = query(
       collection(db, COLLECTION),
       where("maCuaHang", "==", maCuaHang),
@@ -312,10 +330,17 @@ export const donHangService = {
       ghiChu,
     };
 
-    await updateDoc(doc(db, COLLECTION, docId), {
+    const updates: Record<string, unknown> = {
       trangThai: newStatus,
       lichSuCapNhat: [...current.lichSuCapNhat, lichSuMoi],
-    });
+    };
+
+    // PRD BR-01: ghi nhận ngày giao đúng thời điểm chuyển DA_GIAO (idempotent, không ghi đè)
+    if (newStatus === TrangThaiDonHang.DA_GIAO && !current.ngayGiao) {
+      updates.ngayGiao = Timestamp.now();
+    }
+
+    await updateDoc(doc(db, COLLECTION, docId), updates);
 
     // YC 18, TC 2: Audit log for status update
     auditLogService.log({

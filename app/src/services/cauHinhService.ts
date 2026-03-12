@@ -12,6 +12,7 @@ const COLLECTION = 'cauHinhCuaHang';
 
 export const cauHinhService = {
   async get(maCuaHang: string): Promise<CauHinhCuaHang | null> {
+    if (!maCuaHang) return null; // Guard: tránh lỗi segment khi chưa có maCuaHang
     const docSnap = await getDoc(doc(db, COLLECTION, maCuaHang));
     if (!docSnap.exists()) return null;
     return docSnap.data() as CauHinhCuaHang;

@@ -2,6 +2,7 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+
     function isSignedIn() {
       return request.auth != null;
     }
@@ -10,90 +11,160 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    function userDoc() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid));
-    }
-
+    // ✅ Dùng Custom Claims — không tốn reads
     function userStoreId() {
-      return userDoc().data.maCuaHang;
+      return request.auth.token.maCuaHang;
     }
 
-    // Users: self profile + allow list for bootstrap
+    function userRole() {
+      return request.auth.token.vaiTro;
+    }
+
+    function isAdmin() {
+      return userRole() in ["ADMIN", "SUPER_ADMIN"];
+    }
+
+    function isSameStore(storeId) {
+      return isSignedIn() && userStoreId() == storeId;
+    }
+
+    // Users: đọc profile bằng uid trực tiếp — không dùng claims
+    // vì đây chính là bước lấy thông tin để set claims
     match /users/{userId} {
-      allow get, create, update, delete: if isSelf(userId);
+      allow get: if isSignedIn() && request.auth.uid == userId;
+      allow create, update, delete: if isSignedIn() && request.auth.uid == userId;
       allow list: if isSignedIn();
     }
 
-    // Store document: allow read for users in same store
+    // Store document
     match /cuaHang/{storeId} {
-      allow read: if isSignedIn() && userStoreId() == storeId;
-      allow write: if false; // tighten later if needed
+      allow read: if isSameStore(storeId);
+      allow write: if isAdmin() && isSameStore(storeId);
     }
 
-    // Orders: allow read/write within same store
+    // Orders
     match /donHang/{orderId} {
-      allow read, write: if isSignedIn() && userStoreId() == resource.data.maCuaHang;
-      allow create: if isSignedIn() && userStoreId() == request.resource.data.maCuaHang;
+      allow read: if isSignedIn()
+        && (
+          !resource.data.keys().hasAny(['maCuaHang'])
+          || isSameStore(resource.data.maCuaHang)
+        );
+
+      allow create: if isSignedIn()
+        && isSameStore(request.resource.data.maCuaHang);
+
+      allow update, delete: if isSignedIn()
+        && isSameStore(resource.data.maCuaHang);
     }
 
-    // Inventory: allow read/write within same store
-    match /tonKho/{inventoryId} {
-      allow read, write: if isSignedIn() && userStoreId() == resource.data.maCuaHang;
-      allow create: if isSignedIn() && userStoreId() == request.resource.data.maCuaHang;
-    }
-
-    // Coupons: allow read/write within same store
-    match /phieuGiamGia/{couponId} {
-      allow read, write: if isSignedIn() && userStoreId() == resource.data.maCuaHang;
-      allow create: if isSignedIn() && userStoreId() == request.resource.data.maCuaHang;
-    }
-
-    // Notifications: allow read/write within same store
-    match /thongBao/{notifyId} {
-      allow read, write: if isSignedIn() && userStoreId() == resource.data.maCuaHang;
-      allow create: if isSignedIn() && userStoreId() == request.resource.data.maCuaHang;
-    }
-
-    // Customers: allow read/write within same store
+    // Customers
     match /khachHang/{customerId} {
-      allow read, write: if isSignedIn() && userStoreId() == resource.data.maCuaHang;
-      allow create: if isSignedIn() && userStoreId() == request.resource.data.maCuaHang;
+      allow read: if isSignedIn()
+        && (
+          !resource.data.keys().hasAny(['maCuaHang'])
+          || isSameStore(resource.data.maCuaHang)
+        );
+
+      allow create: if isSignedIn()
+        && isSameStore(request.resource.data.maCuaHang);
+
+      allow update, delete: if isSignedIn()
+        && isSameStore(resource.data.maCuaHang);
     }
 
-    // Services: allow read/write within same store
+    // Services
     match /dichVu/{serviceId} {
-      allow read, write: if isSignedIn() && userStoreId() == resource.data.maCuaHang;
-      allow create: if isSignedIn() && userStoreId() == request.resource.data.maCuaHang;
+      allow read: if isSignedIn()
+        && isSameStore(resource.data.maCuaHang);
+
+      allow create: if isSignedIn()
+        && isSameStore(request.resource.data.maCuaHang);
+
+      allow update, delete: if isAdmin()
+        && isSameStore(resource.data.maCuaHang);
     }
 
-    // Store config: allow read/write within same store
+    // Store config
     match /cauHinhCuaHang/{storeId} {
-      allow read, write: if isSignedIn() && userStoreId() == storeId;
+      allow read: if isSameStore(storeId);
+      allow write: if isAdmin() && isSameStore(storeId);
     }
 
-    // Transactions: allow read/write within same store
+    // Transactions
     match /giaoDich/{transactionId} {
-      allow read, write: if isSignedIn() && userStoreId() == resource.data.maCuaHang;
-      allow create: if isSignedIn() && userStoreId() == request.resource.data.maCuaHang;
+      allow read: if isSignedIn()
+        && isSameStore(resource.data.maCuaHang);
+
+      allow create: if isSignedIn()
+        && isSameStore(request.resource.data.maCuaHang);
+
+      allow update, delete: if isAdmin()
+        && isSameStore(resource.data.maCuaHang);
     }
 
-    // Reports: allow read/write within same store
+    // Reports
     match /baoCao/{reportId} {
-      allow read, write: if isSignedIn() && userStoreId() == resource.data.maCuaHang;
-      allow create: if isSignedIn() && userStoreId() == request.resource.data.maCuaHang;
+      allow read: if isSignedIn()
+        && isSameStore(resource.data.maCuaHang);
+
+      allow create: if isSignedIn()
+        && isSameStore(request.resource.data.maCuaHang);
+
+      allow update, delete: if isAdmin()
+        && isSameStore(resource.data.maCuaHang);
     }
 
-    // Print Jobs: allow read/write within same store
+    // Print Jobs
     match /print_jobs/{jobId} {
-      allow read, write: if isSignedIn() && userStoreId() == resource.data.maCuaHang;
-      allow create: if isSignedIn() && userStoreId() == request.resource.data.maCuaHang;
+      allow read, write: if isSignedIn()
+        && isSameStore(resource.data.maCuaHang);
+
+      allow create: if isSignedIn()
+        && isSameStore(request.resource.data.maCuaHang);
     }
 
-    // Audit logs: allow read within same store, allow client create
+    // Audit logs
     match /auditLog/{logId} {
-      allow read: if isSignedIn() && userStoreId() == resource.data.maCuaHang;
-      allow create: if isSignedIn() && userStoreId() == request.resource.data.maCuaHang;
+      allow read: if isSignedIn()
+        && isSameStore(resource.data.maCuaHang);
+
+      allow create: if isSignedIn()
+        && isSameStore(request.resource.data.maCuaHang);
+
       allow update, delete: if false;
+    }
+
+    // Inventory
+    match /tonKho/{inventoryId} {
+      allow read: if isSignedIn()
+        && isSameStore(resource.data.maCuaHang);
+
+      allow create: if isSignedIn()
+        && isSameStore(request.resource.data.maCuaHang);
+
+      allow update, delete: if isAdmin()
+        && isSameStore(resource.data.maCuaHang);
+    }
+
+    // Coupons
+    match /phieuGiamGia/{couponId} {
+      allow read: if isSignedIn()
+        && isSameStore(resource.data.maCuaHang);
+
+      allow create: if isSignedIn()
+        && isSameStore(request.resource.data.maCuaHang);
+
+      allow update, delete: if isAdmin()
+        && isSameStore(resource.data.maCuaHang);
+    }
+
+    // Notifications
+    match /thongBao/{notifyId} {
+      allow read, write: if isSignedIn()
+        && isSameStore(resource.data.maCuaHang);
+
+      allow create: if isSignedIn()
+        && isSameStore(request.resource.data.maCuaHang);
     }
   }
 }
